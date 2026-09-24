@@ -20,6 +20,17 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Build test image
+      uses: docker/build-push-action@v6
+      with:
+          context: .
+          load: true
+          tags: quakejs:test
+
+    # Starts the image and checks nginx, the game server and the admin interface
+    - name: Smoke test
+      run: sh .github/smoke-test.sh quakejs:test
+
     # Only log in and push for commits on master; pull requests just build the image.
     - name: Login to DockerHub
       if: github.event_name == 'push'

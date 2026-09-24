@@ -32,9 +32,32 @@ docker run -d --name quakejs -p 8080:80 prinzwalium/quakejs:latest
 
 Send all you friends/coworkers the link: ex. http://localhost:8080 and start fragging ;)
 
-#### server.cfg:
+#### Admin interface
 
-Refer to [quake3world](https://www.quake3world.com/q3guide/servers.html) for instructions on its usage.
+The image includes a web interface at `/admin/` (e.g. http://localhost:8080/admin/) to manage the server:
+
+- **Settings:** server name, message of the day, join password, max players, game type, frag/time/capture limits, friendly fire, quad factor, respawn times, bots (allowed, fill up to N players, skill)
+- **Map rotation:** built from the maps the server actually has, in any order
+- **Live control:** current map and players, change map, restart match, skip to the next map, add/kick bots, kick players, send a message to all players, a console for any other server command, and a game server restart
+
+It is disabled unless you set `ADMIN_PASSWORD` (at least 12 characters):
+
+```
+docker run -d --name quakejs -p 8080:80 -e ADMIN_PASSWORD='a-long-random-password' -v ./data:/data prinzwalium/quakejs:latest
+```
+
+Settings are stored in `/data/settings.json`. Mount `/data` as a volume to keep them when the container is recreated.
+The game server config (`server.cfg`, `settings.cfg`) is generated from these settings at every start, so a
+`server.cfg` mounted into the container is overwritten; use the *Extra config* field for additional commands.
+
+Security:
+
+- Serve `/admin/` over HTTPS (e.g. behind your reverse proxy); the session cookie is marked `Secure` when the proxy sends `X-Forwarded-Proto: https`.
+- Logins are rate-limited: 5 failed attempts from one IP lock that IP out for 15 minutes (behind a reverse proxy, all requests share the proxy's IP). Sessions expire after 2 hours of inactivity or 12 hours at most.
+- The admin talks to the game server over rcon with a random password generated on first start (stored in `/data/rcon_password`). Set `RCON_PASSWORD` to choose one yourself, e.g. to use rcon from a game client.
+- If you don't need the admin interface, leave `ADMIN_PASSWORD` unset; you can additionally block `/admin/` in your reverse proxy.
+
+Changes are applied to the running server when you save. Max players, game type and "bots allowed" take effect when the next map loads.
 
 #### docker-compose.yml
 
@@ -45,6 +68,10 @@ services:
         ports:
             - '8080:80'
         image: 'prinzwalium/quakejs:latest'
+        environment:
+            ADMIN_PASSWORD: 'a-long-random-password'
+        volumes:
+            - ./data:/data
         restart: unless-stopped
 ```
 
@@ -70,6 +97,7 @@ Only the official `node` base image and the Debian packages `nginx` and `supervi
 | `include/ioq3ded/` | QuakeJS dedicated server, with the interactive EULA prompt removed |
 | `include/quakejs/html/` | QuakeJS web client from [begleysm/quakejs](https://github.com/begleysm/quakejs), pre-patched for reverse proxies, see [UPSTREAM.md](include/quakejs/UPSTREAM.md) |
 | `include/quakejs/node_modules/` | `ws`, the only runtime dependency of the dedicated server |
+| `admin/` | Admin interface (Node.js, no dependencies) and the generator for the game server config |
 
 The dedicated server is started with `+set fs_cdn 127.0.0.1:80`, so it loads its content from the
 container's own nginx instead of content.quakejs.com.

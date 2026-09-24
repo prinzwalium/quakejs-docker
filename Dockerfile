@@ -23,9 +23,8 @@ COPY ./include/quakejs/node_modules/ /quakejs/node_modules/
 COPY ./include/ioq3ded/ioq3ded.fixed.js /quakejs/build/ioq3ded.js
 COPY ./include/quakejs/html/ /quakejs/html/
 
-# Copy server configuration files
-COPY server.cfg /quakejs/base/baseq3/
-COPY server.cfg /quakejs/base/cpma/
+# Admin interface; also generates server.cfg from /data/settings.json at startup
+COPY ./admin/ /quakejs/admin/
 
 # Link QuakeJS to the nginx web root
 RUN rm -rf /var/www/html && ln -s /quakejs/html /var/www/html
@@ -37,11 +36,16 @@ COPY ./include/assets/ /quakejs/html/assets/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY nginx.conf /etc/nginx/sites-available/default
 
-# Create a non-root user for running the QuakeJS server
-RUN groupadd -r quakejs && useradd -r -g quakejs quakejs && \
-    chown -R quakejs:quakejs /quakejs
+# Create a non-root user for the game server and the admin interface. It can only write
+# to the game's data directory and /data; the code stays owned by root and read-only.
+RUN groupadd -r quakejs && useradd -r -g quakejs -d /quakejs quakejs && \
+    mkdir -p /data /quakejs/base/baseq3 /quakejs/base/cpma && \
+    chown -R quakejs:quakejs /quakejs/base /data
 
 EXPOSE 80 27960
 
-# Start the supervisor daemon
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Admin settings, generated rcon password. Mount a volume here to keep them across updates.
+VOLUME /data
+
+# Write the game config from the saved settings, then start nginx, the game server and the admin interface
+CMD ["sh", "-c", "node /quakejs/admin/init.js && exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
