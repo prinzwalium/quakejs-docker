@@ -74,6 +74,10 @@ Only the official `node` base image and the Debian packages `nginx` and `supervi
 The dedicated server is started with `+set fs_cdn 127.0.0.1:80`, so it loads its content from the
 container's own nginx instead of content.quakejs.com.
 
+To build and publish an image from any branch without touching `latest`, run the
+**Manual Docker Image Build** workflow from the Actions tab and pick the branch. The image is pushed
+as `prinzwalium/quakejs:<branch-name>` (with `/` replaced by `-`), or with the tag you enter.
+
 To keep a copy of a known-good image that does not depend on Docker Hub:
 
 ```
