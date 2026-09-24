@@ -1,0 +1,10 @@
+{
+  "name": "quakejs-server-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runtime dependencies of the QuakeJS dedicated server (build/ioq3ded.js). Vendored in node_modules so the image builds without the npm registry.",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "0.4.32"
+  }
+}
