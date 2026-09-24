@@ -4,8 +4,11 @@ services:
         ports:
             - '8080:80'
             - '27960:27960'
-        image: 'PrinzWalium/quakejs:latest'
-        # Fix for unavalible external content server
+        image: 'prinzwalium/quakejs:latest'
+        # To test a locally built image instead, comment out "image" above and uncomment:
+        # build: .
+        # Not required any more (the server uses fs_cdn 127.0.0.1:80, see supervisord.conf),
+        # kept as a safety net so nothing can ever reach the external content server.
         extra_hosts:
             - "content.quakejs.com:127.0.0.1"
         restart: unless-stopped
