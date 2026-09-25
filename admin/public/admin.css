@@ -156,3 +156,45 @@ table.players { width: 100%; border-collapse: collapse; }
   main { padding: 8px; }
   .players th:nth-child(4), .players td:nth-child(4) { display: none; }
 }
+
+h3 { font-size: 14px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+
+a.button {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+a.button:hover { border-color: var(--muted); }
+
+.table-wrap { overflow-x: auto; margin-bottom: 12px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.players th.num, .players td.num { text-align: right; }
+
+.stats-bar { justify-content: space-between; margin-bottom: 8px; }
+.stats-table { min-width: 640px; }
+.stats-table td:last-child { text-align: left; }
+.stats-table button.sort {
+  background: none; border: 0; padding: 0; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.stats-table th[aria-sort] button.sort { color: var(--text); }
+.stats-table th[aria-sort="descending"] button.sort::after { content: " ▾"; }
+.stats-table th[aria-sort="ascending"] button.sort::after { content: " ▴"; }
+.stats-table tr.clickable { cursor: pointer; }
+.stats-table tr.clickable:hover td { background: rgba(255, 255, 255, 0.03); }
+.stats-table tr.detail td { background: var(--bg); }
+.stats-table tr.detail .facts { margin: 4px 0; }
+
+.roster input, .roster select { margin-top: 0; }
+.roster td { vertical-align: middle; }
+.roster td:first-child { min-width: 140px; }
+.roster td:nth-child(2) { min-width: 200px; }
+
+.recent { list-style: none; padding: 0; margin: 0; }
+.recent li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.recent li > span:first-child { min-width: 140px; font-weight: 600; }
+.recent select { width: auto; flex: 0 1 200px; margin-top: 0; }

@@ -1,0 +1,109 @@
+.qjs-lobby {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(8, 9, 10, 0.92);
+	font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	color: #e6e6e6;
+	overflow: auto;
+}
+
+.qjs-lobby-box {
+	width: 100%;
+	max-width: 560px;
+	max-height: 100%;
+	overflow: auto;
+	background: #1b1e21;
+	border: 1px solid #2c3035;
+	border-radius: 8px;
+	padding: 20px;
+	box-sizing: border-box;
+}
+
+.qjs-lobby h1 { font-size: 20px; margin: 0 0 16px; }
+
+.qjs-lobby label, .qjs-lobby-label { display: block; color: #9aa0a6; font-size: 13px; margin-bottom: 4px; }
+
+.qjs-lobby input, .qjs-lobby select {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	margin-top: 4px;
+	padding: 9px 10px;
+	background: #111315;
+	color: #e6e6e6;
+	border: 1px solid #2c3035;
+	border-radius: 6px;
+	font: inherit;
+	font-size: 16px;
+}
+
+.qjs-lobby-hint { color: #9aa0a6; font-size: 12px; margin: 6px 0 16px; }
+
+.qjs-lobby-models {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.qjs-lobby-model {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 8px 4px;
+	background: #111315;
+	color: #e6e6e6;
+	border: 2px solid #2c3035;
+	border-radius: 6px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.qjs-lobby-model[aria-pressed="true"] { border-color: #d9822b; background: #2a1f14; }
+.qjs-lobby-model img { width: 64px; height: 64px; image-rendering: auto; }
+
+.qjs-lobby-error { color: #f85149; margin: 0 0 12px; }
+
+.qjs-lobby-play {
+	width: 100%;
+	padding: 12px;
+	background: #d9822b;
+	color: #111;
+	border: 0;
+	border-radius: 6px;
+	font: inherit;
+	font-size: 17px;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.qjs-lobby-stats { display: block; text-align: center; margin-top: 12px; color: #d9822b; }
+
+.qjs-lobby button:focus-visible, .qjs-lobby input:focus, .qjs-lobby select:focus { outline: 2px solid #d9822b; outline-offset: 1px; }
+
+.qjs-lobby-change {
+	position: fixed;
+	top: 8px;
+	right: 8px;
+	z-index: 50;
+	padding: 4px 10px;
+	background: rgba(17, 19, 21, 0.8);
+	color: #e6e6e6;
+	border: 1px solid #2c3035;
+	border-radius: 4px;
+	font: 13px system-ui, sans-serif;
+	text-decoration: none;
+	transition: opacity 1s;
+}
+.qjs-lobby-change.qjs-hidden { opacity: 0; pointer-events: none; }
+
+[hidden] { display: none !important; }
+
+.qjs-lobby p { margin: 0 0 12px; }
+.qjs-lobby-link { display: block; text-align: center; text-decoration: none; box-sizing: border-box; }

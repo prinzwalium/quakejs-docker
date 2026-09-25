@@ -4,7 +4,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { Store } = require('./lib/config');
+const { Stats } = require('./lib/stats');
 
 const USER = 'quakejs';
 const DATA_DIR = process.env.QJS_DATA_DIR || '/data';
@@ -40,3 +42,28 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(store.settingsFile)) store.save(settings);
 else store.writeGameConfig(settings);
 console.log(`[init] wrote game config (${settings.rotation.length} maps in rotation)`);
+
+// Count the rest of the previous game log into the statistics, then archive it, so the
+// log never grows without bound. The game server is not running yet at this point.
+const KEEP_LOGS = 20;
+const logFile = path.join(GAME_DIRS[0], 'games.log');
+try {
+  if (fs.existsSync(logFile) && fs.statSync(logFile).size > 0) {
+    const stats = new Stats({ dataDir: DATA_DIR, logFile });
+    stats.ingest(false);
+    stats.state.log = { ino: null, offset: 0 };
+    stats.dirty = true;
+    stats.save();
+    const logDir = path.join(DATA_DIR, 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const archive = path.join(logDir, `games-${new Date().toISOString().replace(/[:.]/g, '-')}.log.gz`);
+    fs.writeFileSync(archive, zlib.gzipSync(fs.readFileSync(logFile)), { mode: 0o600 });
+    fs.unlinkSync(logFile);
+    const old = fs.readdirSync(logDir).filter(f => /^games-.*\.log\.gz$/.test(f)).sort();
+    for (const f of old.slice(0, Math.max(0, old.length - KEEP_LOGS))) fs.unlinkSync(path.join(logDir, f));
+    console.log(`[init] archived game log to ${archive}`);
+  }
+} catch (e) {
+  // Statistics must never keep the server from starting.
+  console.error(`[init] could not process the game log: ${e.message}`);
+}

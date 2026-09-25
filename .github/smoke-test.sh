@@ -61,4 +61,27 @@ curl -fsS -b "$JAR" -H 'X-Requested-With: qjs-admin' -H 'Content-Type: applicati
   -d '{"command":"sv_hostname"}' "$BASE/admin/api/console"
 echo
 
+echo "lobby:"
+curl -fsS "$BASE/admin/api/public/lobby" | grep -q '"id":"sarge"'
+curl -fsS -o /dev/null -w '%{content_type}\n' "$BASE/admin/api/public/icon/sarge/default.png" | grep -q image/png
+curl -fsS "$BASE/lobby.js" | grep -q qjsLobby
+
+echo "disconnect page (client POSTs to / after leaving the game):"
+curl -fsS -X POST -d 'error=test' "$BASE/" | grep -q 'You were disconnected'
+
+echo "statistics are private by default:"
+code="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/api/public/stats")"
+[ "$code" = "404" ] || { echo "expected 404, got $code"; exit 1; }
+curl -fsS -o /dev/null "$BASE/stats/"
+
+echo "make statistics public:"
+curl -fsS -b "$JAR" -X PUT -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  -d '{"statsPublic":true}' "$BASE/admin/api/settings" | grep -q '"statsPublic":true'
+curl -fsS "$BASE/admin/api/public/stats?bots=1" | grep -q '"players"'
+
+echo "player roster:"
+curl -fsS -b "$JAR" -X PUT -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  -d '{"players":[{"name":"Smoke","aliases":["Tester"],"model":"sarge"}]}' "$BASE/admin/api/players" | grep -q '"name":"Smoke"'
+curl -fsS "$BASE/admin/api/public/lobby" | grep -q '"name":"Smoke"'
+
 echo "smoke test passed"

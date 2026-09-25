@@ -61,7 +61,7 @@
   async function showApp() {
     showOnly('app');
     await loadState();
-    await refreshStatus();
+    await Promise.all([refreshStatus(), loadPlayers(), loadStats()]);
     clearInterval(statusTimer);
     statusTimer = setInterval(() => { if (!document.hidden) refreshStatus(); }, 5000);
   }
@@ -295,6 +295,183 @@
       input.value = '';
     } catch (e) {
       out.textContent = `> ${cmd}\n${e.message}`;
+    }
+  });
+
+  // ------------------------------------------------------------ players (roster)
+
+  let roster = [];
+  let models = [];
+
+  function modelSelect(value) {
+    const sel = document.createElement('select');
+    sel.append(option('', '(none)'), ...models.map(m => option(m, m)));
+    sel.value = value || '';
+    return sel;
+  }
+
+  function renderRoster() {
+    const tbody = $('roster');
+    if (!roster.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'muted';
+      td.textContent = 'No players yet.';
+      tr.append(td);
+      tbody.replaceChildren(tr);
+      return;
+    }
+    tbody.replaceChildren(...roster.map((p, i) => {
+      const tr = document.createElement('tr');
+      const name = document.createElement('input');
+      name.type = 'text';
+      name.maxLength = 32;
+      name.value = p.name;
+      name.setAttribute('aria-label', 'Name');
+      name.addEventListener('input', () => { p.name = name.value; });
+      const aliases = document.createElement('input');
+      aliases.type = 'text';
+      aliases.value = p.aliases.join(', ');
+      aliases.setAttribute('aria-label', 'Other names');
+      aliases.addEventListener('input', () => { p.aliases = aliases.value.split(',').map(a => a.trim()).filter(Boolean); });
+      const model = modelSelect(p.model);
+      model.setAttribute('aria-label', 'Default model');
+      model.addEventListener('change', () => { p.model = model.value; });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'secondary small';
+      del.textContent = 'Remove';
+      del.addEventListener('click', () => { roster.splice(i, 1); renderRoster(); });
+      for (const c of [name, aliases, model, del]) {
+        const td = document.createElement('td');
+        td.append(c);
+        tr.append(td);
+      }
+      return tr;
+    }));
+  }
+
+  function renderRecent(recent) {
+    const ul = $('recent-names');
+    if (!recent.length) {
+      const li = document.createElement('li');
+      li.className = 'muted';
+      li.textContent = 'None';
+      ul.replaceChildren(li);
+      return;
+    }
+    ul.replaceChildren(...recent.map((r) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = r.name;
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'secondary small';
+      add.textContent = 'Add as player';
+      add.addEventListener('click', () => {
+        roster.push({ name: r.name, aliases: [], model: models.includes(r.model) ? r.model : '' });
+        renderRoster();
+        li.remove();
+      });
+      const target = document.createElement('select');
+      target.setAttribute('aria-label', `Add ${r.name} as another name of`);
+      target.append(option('', 'Another name of…'), ...roster.map((p, i) => option(String(i), p.name)));
+      const alias = document.createElement('button');
+      alias.type = 'button';
+      alias.className = 'secondary small';
+      alias.textContent = 'Add';
+      alias.addEventListener('click', () => {
+        const p = roster[Number(target.value)];
+        if (target.value === '' || !p) return;
+        p.aliases.push(r.name);
+        renderRoster();
+        li.remove();
+      });
+      li.append(name, add, target, alias);
+      return li;
+    }));
+  }
+
+  async function loadPlayers() {
+    try {
+      const r = await api('GET', 'players');
+      roster = r.players.map(p => ({ id: p.id, name: p.name, aliases: p.aliases.slice(), model: p.model }));
+      models = r.models;
+      renderRoster();
+      renderRecent(r.recent);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    $('name-mode').value = String(state.settings.nameMode || 0);
+    $('stats-public').checked = !!state.settings.statsPublic;
+  }
+
+  $('roster-add').addEventListener('click', () => {
+    roster.push({ name: '', aliases: [], model: '' });
+    renderRoster();
+    const inputs = $('roster').querySelectorAll('input');
+    if (inputs.length) inputs[inputs.length - 2].focus();
+  });
+
+  $('roster-save').addEventListener('click', async () => {
+    const btn = $('roster-save');
+    btn.disabled = true;
+    try {
+      const r = await api('PUT', 'players', { players: roster.filter(p => p.name.trim() || p.aliases.length) });
+      roster = r.players.map(p => ({ id: p.id, name: p.name, aliases: p.aliases.slice(), model: p.model }));
+      renderRoster();
+      renderRecent(r.recent);
+      toast('Players saved');
+      loadStats();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Admin-only settings that are changed outside the settings form.
+  async function saveSetting(body, okMsg, revert) {
+    try {
+      const r = await api('PUT', 'settings', body);
+      state.settings = r.settings;
+      toast(okMsg);
+    } catch (e) {
+      revert();
+      toast(e.message, true);
+    }
+  }
+
+  $('name-mode').addEventListener('change', (ev) => {
+    const v = Number(ev.target.value);
+    if (v === 1 && !roster.length) toast('The player list is empty: everyone would be kicked. Add players first.', true);
+    saveSetting({ nameMode: v }, v === 1 ? 'Only players on the list can join now' : 'Anyone can join now',
+      () => { ev.target.value = String(state.settings.nameMode || 0); });
+  });
+
+  // ------------------------------------------------------------ statistics
+
+  let statsTable = null;
+  async function loadStats() {
+    if (!statsTable) statsTable = window.QjsStats.mount($('admin-stats'));
+    try { await statsTable.reload(); } catch (e) { toast(e.message, true); }
+  }
+
+  $('stats-public').addEventListener('change', (ev) => {
+    const v = ev.target.checked;
+    saveSetting({ statsPublic: v }, v ? 'The stats page is now public' : 'The stats page is now private',
+      () => { ev.target.checked = !!state.settings.statsPublic; });
+  });
+
+  $('stats-reset').addEventListener('click', async () => {
+    if (!confirm('Reset all player statistics? The current statistics are archived first.')) return;
+    try {
+      await api('POST', 'stats/reset');
+      toast('Statistics reset');
+      loadStats();
+    } catch (e) {
+      toast(e.message, true);
     }
   });
 

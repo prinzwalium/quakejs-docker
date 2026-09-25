@@ -93,7 +93,8 @@ class Rcon {
     const clients = [];
     for (const l of out.split('\n')) {
       const m = /^\s*(\d+)\s+(-?\d+)\s+(\S+)\s+(.*?)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s*$/.exec(l);
-      if (m) {
+      // Kicked or disconnected clients stay listed as "ZMBI" for a few seconds.
+      if (m && m[3] !== 'ZMBI') {
         clients.push({
           num: Number(m[1]), score: Number(m[2]), ping: m[3], name: m[4].replace(/\^./g, ''),
           bot: m[6] === 'bot',
