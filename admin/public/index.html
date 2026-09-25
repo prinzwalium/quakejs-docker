@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>QuakeJS Admin</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/admin/admin.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>QuakeJS Admin</h1>
+    <button id="logout" class="secondary" hidden>Log out</button>
+  </header>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <section id="disabled" class="card" hidden>
+      <h2>Admin interface disabled</h2>
+      <p id="disabled-reason"></p>
+    </section>
+
+    <section id="login" class="card narrow" hidden>
+      <h2>Log in</h2>
+      <form id="login-form">
+        <label>Admin password
+          <input type="password" id="login-password" autocomplete="current-password" required autofocus>
+        </label>
+        <button type="submit">Log in</button>
+        <p id="login-error" class="error" hidden></p>
+      </form>
+    </section>
+
+    <div id="app" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2>Server status</h2>
+          <span id="status-badge" class="badge">…</span>
+        </div>
+        <dl class="facts">
+          <div><dt>Map</dt><dd id="st-map">–</dd></div>
+          <div><dt>Game type</dt><dd id="st-gametype">–</dd></div>
+          <div><dt>Players</dt><dd id="st-players">–</dd></div>
+        </dl>
+        <div id="restart-banner" class="banner" hidden>
+          <span>Some saved settings take effect when the next map loads: <strong id="restart-fields"></strong>. Change the map to apply them now.</span>
+        </div>
+        <table class="players">
+          <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Ping</th><th></th></tr></thead>
+          <tbody id="players"><tr><td colspan="5" class="muted">No players</td></tr></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Live control</h2>
+        <div class="grid">
+          <div class="control">
+            <label>Change map
+              <select id="act-map"></select>
+            </label>
+            <button data-action="map">Change now</button>
+          </div>
+          <div class="control">
+            <span class="label">Match</span>
+            <div class="row">
+              <button data-action="restartMatch" class="secondary">Restart match</button>
+              <button data-action="nextMap" class="secondary">Next map in rotation</button>
+            </div>
+          </div>
+          <div class="control">
+            <label>Add bot
+              <span class="row">
+                <select id="act-bot"></select>
+                <select id="act-bot-skill" aria-label="Bot skill">
+                  <option value="1">1 – I Can Win</option>
+                  <option value="2">2 – Bring It On</option>
+                  <option value="3" selected>3 – Hurt Me Plenty</option>
+                  <option value="4">4 – Hardcore</option>
+                  <option value="5">5 – Nightmare!</option>
+                </select>
+              </span>
+            </label>
+            <div class="row">
+              <button data-action="addBot">Add bot</button>
+              <button data-action="kickBots" class="secondary">Remove all bots</button>
+            </div>
+          </div>
+          <div class="control">
+            <label>Message to all players
+              <input type="text" id="act-say" maxlength="150">
+            </label>
+            <button data-action="say">Send</button>
+          </div>
+        </div>
+        <div class="restart-row">
+          <button id="restart" class="danger">Restart game server</button>
+          <span class="muted">Disconnects all players for a few seconds and starts the rotation from the first map.</span>
+        </div>
+      </section>
+
+      <form id="settings-form" class="card">
+        <div class="card-head">
+          <h2>Settings</h2>
+          <button type="submit">Save &amp; apply</button>
+        </div>
+        <p class="muted">Changes are applied to the running server right away. Fields marked
+          <span class="tag next">next map</span> apply when the next map loads.</p>
+
+        <fieldset>
+          <legend>Server</legend>
+          <label>Server name <input name="hostname" type="text" maxlength="64"></label>
+          <label>Message of the day <input name="motd" type="text" maxlength="128"></label>
+          <label>Join password <input name="password" type="text" maxlength="32" placeholder="none" autocomplete="off"></label>
+          <label>Max players <span class="tag next">next map</span> <input name="maxclients" type="number" min="1" max="32"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Game rules</legend>
+          <label>Game type <span class="tag next">next map</span> <select name="gametype" id="gametype"></select></label>
+          <label>Frag limit <input name="fraglimit" type="number" min="0" max="999"></label>
+          <label>Time limit (minutes) <input name="timelimit" type="number" min="0" max="999"></label>
+          <label>Capture limit (CTF) <input name="capturelimit" type="number" min="0" max="999"></label>
+          <label>Quad damage factor <input name="quadfactor" type="number" min="1" max="10"></label>
+          <label>Weapon respawn (seconds) <input name="weaponrespawn" type="number" min="1" max="60"></label>
+          <label>Force respawn after (seconds, 0 = off) <input name="forcerespawn" type="number" min="0" max="60"></label>
+          <label>Kick inactive players after (seconds, 0 = off) <input name="inactivity" type="number" min="0" max="86400"></label>
+          <label class="check"><input name="friendlyfire" type="checkbox"> Friendly fire</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Bots</legend>
+          <label class="check"><input name="botEnable" type="checkbox"> Bots allowed <span class="tag next">next map</span></label>
+          <label>Fill server with bots up to (players, 0 = off) <input name="botMinplayers" type="number" min="0" max="32"></label>
+          <label>Skill of automatic bots
+            <select name="botSkill">
+              <option value="1">1 – I Can Win</option>
+              <option value="2">2 – Bring It On</option>
+              <option value="3">3 – Hurt Me Plenty</option>
+              <option value="4">4 – Hardcore</option>
+              <option value="5">5 – Nightmare!</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Map rotation</legend>
+          <ol id="rotation" class="rotation"></ol>
+          <div class="row">
+            <select id="rotation-add" aria-label="Map to add"></select>
+            <button type="button" id="rotation-add-btn" class="secondary">Add to rotation</button>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Extra config (advanced)</legend>
+          <label>Additional console commands, one per line. Lines that change the rcon password or the rotation, or use exec or quit, are ignored.
+            <textarea name="extra" rows="4" maxlength="4000" spellcheck="false"></textarea>
+          </label>
+        </fieldset>
+      </form>
+
+      <section class="card">
+        <h2>Console</h2>
+        <form id="console-form" class="row">
+          <input type="text" id="console-input" placeholder="e.g. cvarlist g_*" maxlength="256" autocomplete="off" spellcheck="false">
+          <button type="submit">Run</button>
+        </form>
+        <pre id="console-output" class="console"></pre>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

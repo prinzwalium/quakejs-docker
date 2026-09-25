@@ -7,6 +7,13 @@ services:
         image: 'prinzwalium/quakejs:latest'
         # To test a locally built image instead, comment out "image" above and uncomment:
         # build: .
+        environment:
+            # Enables the admin interface at /admin/ (at least 12 characters).
+            # Leave unset to disable it.
+            ADMIN_PASSWORD: 'change-me-to-a-long-password'
+        volumes:
+            # Admin settings and the generated rcon password
+            - ./data:/data
         # Not required any more (the server uses fs_cdn 127.0.0.1:80, see supervisord.conf),
         # kept as a safety net so nothing can ever reach the external content server.
         extra_hosts:
