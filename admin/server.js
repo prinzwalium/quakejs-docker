@@ -8,12 +8,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 
-const { FIELDS, GAMETYPES, MAP_RE, validate, ValidationError, Store } = require('./lib/config');
+const { FIELDS, GAMETYPES, MAP_RE, defaults, validate, ValidationError, Store, writeFileAtomic } = require('./lib/config');
 const { Rcon, RconError } = require('./lib/rcon');
 const pk3 = require('./lib/pk3');
 const { tgaToPng } = require('./lib/tga');
 const { Roster, RosterError, cleanName } = require('./lib/players');
 const { Stats } = require('./lib/stats');
+const { Bans, BanError } = require('./lib/bans');
+const { Audit } = require('./lib/audit');
+const { parseCidrs, clientAddress } = require('./lib/netaddr');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.ADMIN_PORT) || 8081;
@@ -29,6 +32,9 @@ const SESSION_IDLE_MS = 2 * 3600 * 1000;
 const LOGIN_MAX_FAILS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_BODY = 64 * 1024;
+const MAX_BACKUP_BODY = 5 * 1024 * 1024;
+// Reverse proxies in front of the container whose X-Forwarded-For is trusted (IPv4/CIDR list).
+const TRUSTED_PROXIES = parseCidrs(process.env.TRUSTED_PROXIES);
 
 const log = (...a) => console.log('[admin]', ...a);
 
@@ -52,41 +58,68 @@ let settings = store.load();
 const rcon = new Rcon({ url: GAME_URL, password: store.rconPassword() });
 const roster = new Roster(DATA_DIR);
 
-// "Roster names only": kick humans whose name is not on the roster. The log line may be
-// older than the current game state, so the name is checked against the live client list first.
+const bans = new Bans(DATA_DIR);
+const audit = new Audit(DATA_DIR);
+
+// Logs an admin action to the container output and the audit log.
+function audited(ip, action, detail) {
+  log(`${action} by ${ip}${detail ? `: ${detail}` : ''}`);
+  audit.add(ip, action, detail);
+}
+
+// Kicks banned players and, with "roster names only", players not on the roster.
+// Log lines may be older than the current game state, so the live client list decides.
 const recentKicks = new Map();
-async function enforceRoster({ num, name, bot }) {
-  if (bot || settings.nameMode !== 1 || roster.resolve(name)) return;
-  const key = `${num}:${name.toLowerCase()}`;
+function banText(ban) {
+  const until = ban.until ? ` until ${new Date(ban.until).toISOString()}` : '';
+  return `${ban.reason || 'banned'}${until}`;
+}
+
+async function enforcePlayer(c) {
+  if (c.bot) return;
+  const name = cleanName(c.name);
+  const ban = bans.match({ ip: c.ip, name });
+  const notListed = settings.nameMode === 1 && !roster.resolve(name);
+  if (!ban && !notListed) return;
+  const key = `${c.num}:${name.toLowerCase()}`;
   if (recentKicks.has(key) && recentKicks.get(key) > Date.now() - 10000) return;
   recentKicks.set(key, Date.now());
   if (recentKicks.size > 1000) recentKicks.clear();
+  const why = ban ? `banned (${banText(ban)})` : 'not on the player roster';
+  log(`kicking "${name}" (client ${c.num}, ${c.ip || 'unknown address'}): ${why}`);
+  audit.add('server', 'kick', `${name} (${c.ip || '?'}): ${why}`);
+  await rcon.command(`clientkick ${c.num}`);
+}
+
+async function enforceUserinfo({ num, name, bot }) {
+  if (bot) return;
+  if (!bans.list.length && (settings.nameMode !== 1 || roster.resolve(name))) return;
   try {
     const { clients } = await rcon.clients();
     const c = clients.find(x => x.num === num);
-    if (!c || c.bot || cleanName(c.name).toLowerCase() !== name.toLowerCase()) return;
-    log(`kicking "${name}" (client ${num}): not on the player roster`);
-    await rcon.command(`clientkick ${num}`);
+    if (c && !c.bot && cleanName(c.name).toLowerCase() === name.toLowerCase()) await enforcePlayer(c);
   } catch (e) {
-    log(`could not enforce roster for "${name}": ${e.message}`);
+    log(`could not check "${name}": ${e.message}`);
   }
 }
 
-// Checks everyone who is connected right now (after enabling the mode or editing the roster).
-async function enforceRosterAll() {
-  if (settings.nameMode !== 1) return;
+// Checks everyone who is connected right now.
+async function enforceAll() {
+  if (!bans.list.length && settings.nameMode !== 1) return;
   try {
     const { clients } = await rcon.clients();
-    for (const c of clients) if (!c.bot) await enforceRoster({ num: c.num, name: cleanName(c.name), bot: false });
+    for (const c of clients) await enforcePlayer(c);
   } catch (e) {
-    log(`could not check connected players: ${e.message}`);
+    if (!(e instanceof RconError)) log(`could not check connected players: ${e.message}`);
   }
 }
+// Catches players who joined while the admin was restarting, and expired bans.
+setInterval(() => { bans.prune(); enforceAll(); }, 15000).unref();
 
 const stats = new Stats({
   dataDir: DATA_DIR,
   logFile: path.join(GAME_DIR, 'games.log'),
-  onUserinfo: (u) => { enforceRoster(u); },
+  onUserinfo: (u) => { enforceUserinfo(u); },
 });
 setInterval(() => {
   try {
@@ -151,8 +184,10 @@ function sessionCookie(req, token, maxAgeSec) {
 }
 
 function clientIp(req) {
-  // Only nginx in the same container can reach this server, so X-Real-IP is trustworthy.
-  return req.headers['x-real-ip'] || req.socket.remoteAddress;
+  // Only nginx in the same container can reach this server, so X-Real-IP (the address that
+  // connected to nginx) is trustworthy. Behind trusted reverse proxies the client address
+  // comes from X-Forwarded-For (see lib/netaddr.js).
+  return clientAddress(req.headers['x-real-ip'] || req.socket.remoteAddress, req.headers['x-forwarded-for'], TRUSTED_PROXIES);
 }
 
 // ---------------------------------------------------------------- http helpers
@@ -179,14 +214,14 @@ function send(res, status, body, headers = {}) {
   res.end(data);
 }
 
-function readJson(req) {
+function readJson(req, maxBody = MAX_BODY) {
   return new Promise((resolve, reject) => {
     if (!/^application\/json\b/.test(req.headers['content-type'] || '')) return reject(new HttpError(415, 'Expected JSON'));
     let size = 0;
     const chunks = [];
     const onData = (c) => {
       size += c.length;
-      if (size > MAX_BODY) {
+      if (size > maxBody) {
         // Stop buffering, drain the rest and let the caller answer with 413.
         req.off('data', onData);
         req.resume();
@@ -195,7 +230,7 @@ function readJson(req) {
     };
     req.on('data', onData);
     req.on('end', () => {
-      if (size > MAX_BODY) return;
+      if (size > maxBody) return;
       try {
         resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {});
       } catch (e) {
@@ -257,6 +292,18 @@ function statsReport(bots) {
     favoriteWeapon: r.favoriteWeapon, weapons: r.weapons,
     firstSeen: r.firstSeen, lastSeen: r.lastSeen,
   }));
+}
+
+function backupData() {
+  return {
+    format: 'quakejs-admin-backup',
+    version: 1,
+    created: new Date().toISOString(),
+    settings,
+    players: roster.players,
+    bans: bans.list,
+    stats: stats.exportState(),
+  };
 }
 
 async function handlePublic(req, res, route, query) {
@@ -389,13 +436,14 @@ async function handleApi(req, res, route, query) {
       if (loginFails.size > 10000) loginFails.clear();
       loginFails.set(ip, cur);
       log(`failed login from ${ip} (${cur.fails})`);
+      audit.add(ip, 'login-failed', `attempt ${cur.fails}`);
       await new Promise(r => setTimeout(r, 750));
       throw new HttpError(401, 'Wrong password');
     }
     loginFails.delete(ip);
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, { expires: now + SESSION_ABSOLUTE_MS, lastSeen: now });
-    log(`login from ${ip}`);
+    audited(ip, 'login');
     return send(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(req, token, SESSION_ABSOLUTE_MS / 1000) });
   }
 
@@ -442,8 +490,8 @@ async function handleApi(req, res, route, query) {
     const next = validate(body, settings, available().maps);
     store.save(next);
     settings = next;
-    log(`settings saved by ${ip}`);
-    enforceRosterAll();
+    audited(ip, 'settings', Object.keys(body).filter(k => k !== 'extra').join(', '));
+    enforceAll();
     let applied = true;
     let applyError = null;
     try {
@@ -458,7 +506,7 @@ async function handleApi(req, res, route, query) {
   }
 
   if (route === '/admin/api/restart' && req.method === 'POST') {
-    log(`game server restart requested by ${ip}`);
+    audited(ip, 'restart');
     // Rewrite the config first so the restarted server uses the current settings.
     store.writeGameConfig(settings);
     const out = await restartGameServer();
@@ -468,7 +516,7 @@ async function handleApi(req, res, route, query) {
   if (route === '/admin/api/action' && req.method === 'POST') {
     const body = await readJson(req);
     const out = await runAction(body);
-    log(`action ${body.action} by ${ip}`);
+    audited(ip, 'action', [body.action, body.map, body.name, body.num, body.message].filter(v => v !== undefined && v !== '').join(' '));
     return send(res, 200, { ok: true, output: out });
   }
 
@@ -479,15 +527,95 @@ async function handleApi(req, res, route, query) {
   if (route === '/admin/api/players' && req.method === 'PUT') {
     const body = await readJson(req);
     const players = roster.save(body.players, available().models);
-    log(`player roster saved by ${ip} (${players.length} players)`);
-    enforceRosterAll();
+    audited(ip, 'players', `${players.length} players`);
+    enforceAll();
     return send(res, 200, { ok: true, players, recent: stats.recentNames(roster) });
   }
 
   if (route === '/admin/api/stats/reset' && req.method === 'POST') {
     stats.reset(path.join(DATA_DIR, 'stats-archive'));
-    log(`statistics reset by ${ip}`);
+    audited(ip, 'stats-reset');
     return send(res, 200, { ok: true });
+  }
+
+  if (route === '/admin/api/bans' && req.method === 'GET') {
+    return send(res, 200, { bans: bans.active() });
+  }
+
+  if (route === '/admin/api/bans' && req.method === 'POST') {
+    const body = await readJson(req);
+    const entry = { ip: body.ip, name: body.name, reason: body.reason };
+    // Ban a connected player by client number: take the address and name from the server.
+    if (body.num !== undefined) {
+      const num = Number(body.num);
+      const { clients } = await rcon.clients();
+      const c = clients.find(x => x.num === num && !x.bot);
+      if (!c) throw new HttpError(400, 'That player is no longer connected');
+      if (!c.ip) throw new HttpError(400, 'The address of that player is unknown; ban the name instead');
+      entry.ip = c.ip;
+      entry.name = body.byName ? c.name : undefined;
+    }
+    const duration = body.duration === null || body.duration === undefined || body.duration === '' ? null : Number(body.duration);
+    if (duration !== null && (!Number.isFinite(duration) || duration <= 0)) throw new HttpError(400, 'Invalid duration');
+    entry.until = duration === null ? null : Date.now() + duration * 1000;
+    const ban = bans.add(entry);
+    audited(ip, 'ban', `${ban.ip || ''} ${ban.name || ''} ${banText(ban)}`.trim());
+    enforceAll();
+    return send(res, 200, { ok: true, ban, bans: bans.active() });
+  }
+
+  if (route === '/admin/api/bans' && req.method === 'DELETE') {
+    const id = String(query.get('id') || '');
+    const ban = bans.list.find(b => b.id === id);
+    bans.remove(id);
+    audited(ip, 'unban', ban ? `${ban.ip || ''} ${ban.name || ''}`.trim() : id);
+    return send(res, 200, { ok: true, bans: bans.active() });
+  }
+
+  if (route === '/admin/api/audit' && req.method === 'GET') {
+    const limit = Math.max(1, Math.min(1000, Number(query.get('limit')) || 200));
+    return send(res, 200, { entries: audit.recent(limit) });
+  }
+
+  if (route === '/admin/api/backup' && req.method === 'GET') {
+    audited(ip, 'backup-download');
+    const name = `quakejs-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+    return send(res, 200, JSON.stringify(backupData(), null, 2), {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${name}"`,
+    });
+  }
+
+  if (route === '/admin/api/backup' && req.method === 'POST') {
+    const body = await readJson(req, MAX_BACKUP_BODY);
+    if (!body || body.format !== 'quakejs-admin-backup' || body.version !== 1) throw new HttpError(400, 'This is not a backup file of this admin interface');
+    // Validate everything before changing anything.
+    const { maps, models } = available();
+    const nextSettings = validate(body.settings || {}, defaults(), maps);
+    const nextPlayers = roster.validate(body.players || [], models);
+    const nextBans = bans.validateList(body.bans || []);
+    // Keep the current state, then apply. Statistics are validated while importing,
+    // so they go first: if they are invalid, nothing has been changed yet.
+    const before = backupData();
+    if (body.stats) {
+      try {
+        stats.importState(body.stats);
+      } catch (e) {
+        throw new HttpError(400, e.message);
+      }
+    }
+    const dir = path.join(DATA_DIR, 'backups');
+    fs.mkdirSync(dir, { recursive: true });
+    writeFileAtomic(path.join(dir, `before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.json`), JSON.stringify(before) + '\n', 0o600);
+    store.save(nextSettings);
+    settings = nextSettings;
+    roster.save(nextPlayers, models);
+    bans.replaceAll(nextBans);
+    audited(ip, 'backup-restore', `${nextPlayers.length} players, ${nextBans.length} bans`);
+    let applied = true;
+    try { await rcon.command('exec settings.cfg'); } catch (e) { applied = false; }
+    enforceAll();
+    return send(res, 200, { ok: true, applied });
   }
 
   if (route === '/admin/api/console' && req.method === 'POST') {
@@ -497,7 +625,7 @@ async function handleApi(req, res, route, query) {
     if (/rconpassword|\bquit\b|\bkillserver\b/i.test(cmd)) {
       throw new HttpError(400, 'This command is blocked in the console. Use the settings or the restart button instead.');
     }
-    log(`console command by ${ip}: ${cmd}`);
+    audited(ip, 'console', cmd);
     const out = await rcon.command(cmd);
     return send(res, 200, { ok: true, output: out });
   }
@@ -523,7 +651,7 @@ const server = http.createServer(async (req, res) => {
     let status = 500;
     let message = 'Internal error';
     if (e instanceof HttpError) [status, message] = [e.status, e.message];
-    else if (e instanceof ValidationError || e instanceof RosterError) [status, message] = [400, e.message];
+    else if (e instanceof ValidationError || e instanceof RosterError || e instanceof BanError) [status, message] = [400, e.message];
     else if (e instanceof RconError) [status, message] = [502, e.message];
     else if (e instanceof URIError) [status, message] = [400, 'Bad request'];
     else console.error('[admin]', e);

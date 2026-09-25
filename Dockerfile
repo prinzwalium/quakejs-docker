@@ -44,6 +44,11 @@ RUN groupadd -r quakejs && useradd -r -g quakejs -d /quakejs quakejs && \
 
 EXPOSE 80 27960
 
+# nginx, the admin interface and the game server must all answer. The start period
+# covers the first start, when the game server installs its game data.
+HEALTHCHECK --interval=30s --timeout=15s --start-period=180s --retries=3 \
+    CMD ["node", "/quakejs/admin/healthcheck.js"]
+
 # Admin settings, generated rcon password. Mount a volume here to keep them across updates.
 VOLUME /data
 

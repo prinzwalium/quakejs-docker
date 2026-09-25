@@ -61,7 +61,7 @@
   async function showApp() {
     showOnly('app');
     await loadState();
-    await Promise.all([refreshStatus(), loadPlayers(), loadStats()]);
+    await Promise.all([refreshStatus(), loadPlayers(), loadStats(), loadBans(), loadAudit()]);
     clearInterval(statusTimer);
     statusTimer = setInterval(() => { if (!document.hidden) refreshStatus(); }, 5000);
   }
@@ -116,7 +116,18 @@
         if (!confirm(`Kick ${c.name}?`)) return;
         await doAction({ action: 'kick', num: c.num }, `${c.name} kicked`);
       });
-      td.append(b);
+      const cell = document.createElement('span');
+      cell.className = 'row';
+      cell.append(b);
+      if (!c.bot) {
+        tr.title = c.ip ? `Address: ${c.ip}` : '';
+        const ban = document.createElement('button');
+        ban.className = 'secondary small';
+        ban.textContent = 'Ban';
+        ban.addEventListener('click', () => banPlayer(c));
+        cell.append(ban);
+      }
+      td.append(cell);
       tr.append(td);
       return tr;
     }));
@@ -470,6 +481,144 @@
       await api('POST', 'stats/reset');
       toast('Statistics reset');
       loadStats();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
+
+  // ------------------------------------------------------------ bans
+
+  function fmtTime(ts) {
+    return ts ? new Date(ts).toLocaleString() : 'permanent';
+  }
+
+  function renderBans(list) {
+    const tbody = $('bans');
+    if (!list.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      td.className = 'muted';
+      td.textContent = 'No active bans.';
+      tr.append(td);
+      tbody.replaceChildren(tr);
+      return;
+    }
+    tbody.replaceChildren(...list.map((b) => {
+      const tr = document.createElement('tr');
+      for (const v of [b.ip || '–', b.name || '–', b.reason || '–', fmtTime(b.until)]) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.append(td);
+      }
+      const td = document.createElement('td');
+      const un = document.createElement('button');
+      un.className = 'secondary small';
+      un.textContent = 'Unban';
+      un.addEventListener('click', async () => {
+        try {
+          const r = await api('DELETE', `bans?id=${encodeURIComponent(b.id)}`);
+          renderBans(r.bans);
+          toast('Ban removed');
+          loadAudit();
+        } catch (e) {
+          toast(e.message, true);
+        }
+      });
+      td.append(un);
+      tr.append(td);
+      return tr;
+    }));
+  }
+
+  async function loadBans() {
+    try { renderBans((await api('GET', 'bans')).bans); } catch (e) { toast(e.message, true); }
+  }
+
+  async function addBan(body, okMsg) {
+    try {
+      const r = await api('POST', 'bans', body);
+      renderBans(r.bans);
+      toast(okMsg);
+      setTimeout(refreshStatus, 1500);
+      loadAudit();
+      return true;
+    } catch (e) {
+      toast(e.message, true);
+      return false;
+    }
+  }
+
+  async function banPlayer(c) {
+    const reason = prompt(`Ban ${c.name}${c.ip ? ` (${c.ip})` : ''}?\nReason:`, '');
+    if (reason === null) return;
+    const hours = prompt('Duration in hours (leave empty for a permanent ban):', '24');
+    if (hours === null) return;
+    const duration = hours.trim() === '' ? null : Math.round(Number(hours) * 3600);
+    if (duration !== null && !(duration > 0)) { toast('Invalid duration', true); return; }
+    await addBan({ num: c.num, reason, duration }, `${c.name} banned`);
+  }
+
+  $('ban-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const ip = $('ban-ip').value.trim();
+    const name = $('ban-name').value.trim();
+    if (!ip && !name) { toast('Enter an IP address or a name', true); return; }
+    const d = $('ban-duration').value;
+    const ok = await addBan({ ip: ip || undefined, name: name || undefined, reason: $('ban-reason').value, duration: d === '' ? null : Number(d) }, 'Ban added');
+    if (ok) { $('ban-ip').value = ''; $('ban-name').value = ''; $('ban-reason').value = ''; }
+  });
+
+  // ------------------------------------------------------------ audit log
+
+  async function loadAudit() {
+    try {
+      const { entries } = await api('GET', 'audit?limit=100');
+      const tbody = $('audit');
+      if (!entries.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.className = 'muted';
+        td.textContent = 'Nothing logged yet.';
+        tr.append(td);
+        tbody.replaceChildren(tr);
+        return;
+      }
+      tbody.replaceChildren(...entries.map((e) => {
+        const tr = document.createElement('tr');
+        for (const v of [new Date(e.time).toLocaleString(), e.ip, e.action, e.detail || '']) {
+          const td = document.createElement('td');
+          td.textContent = v;
+          tr.append(td);
+        }
+        return tr;
+      }));
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+  $('audit-refresh').addEventListener('click', loadAudit);
+
+  // ------------------------------------------------------------ backup
+
+  $('backup-file').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0];
+    ev.target.value = '';
+    if (!file) return;
+    if (!confirm(`Restore "${file.name}"? This replaces the settings, the player list, bans and statistics.`)) return;
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (e) {
+      toast('This file is not valid JSON', true);
+      return;
+    }
+    try {
+      const r = await api('POST', 'backup', data);
+      toast(r.applied ? 'Backup restored' : 'Backup restored; settings apply when the game server is running again');
+      await loadState();
+      await Promise.all([loadPlayers(), loadStats(), loadBans(), loadAudit(), refreshStatus()]);
     } catch (e) {
       toast(e.message, true);
     }
