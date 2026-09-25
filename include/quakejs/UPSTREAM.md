@@ -22,6 +22,9 @@ load everything from the host serving the page, so it works behind an HTTPS reve
 - `html/index.html` also loads `lobby.js` / `lobby.css` (added in this repository, not upstream): before
   the game starts, a lobby asks for the player name and model, keeps them in a cookie and passes them as
   `+set name ... +set model ...`. Commands from the URL query string are appended after them.
+  Because the engine reloads the config it keeps in the browser (`q3config.cfg` in IndexedDB) while
+  connecting, `lobby.js` also sets these cvars in the running engine (`ioq3._Cvar_Set`) until they
+  have stuck, and saves later in-game name/model changes back to the cookie.
 - `html/disconnected.html` (added in this repository) is shown by nginx when the client reports an error
   after leaving the game (it POSTs to `/`), instead of nginx's "405 Not Allowed" page.
 
