@@ -107,3 +107,15 @@
 
 .qjs-lobby p { margin: 0 0 12px; }
 .qjs-lobby-link { display: block; text-align: center; text-decoration: none; box-sizing: border-box; }
+
+.qjs-lobby-online {
+	margin: 0 0 16px;
+	padding: 10px 12px;
+	background: #111315;
+	border: 1px solid #2c3035;
+	border-left: 3px solid #3fb950;
+	border-radius: 6px;
+	font-size: 14px;
+}
+.qjs-lobby-online-title { font-weight: 600; overflow-wrap: anywhere; }
+.qjs-lobby-online-who { color: #9aa0a6; margin-top: 2px; overflow-wrap: anywhere; }

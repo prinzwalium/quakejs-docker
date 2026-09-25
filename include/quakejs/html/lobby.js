@@ -48,7 +48,9 @@
 
 	function args(p) {
 		// The engine quotes arguments that contain spaces itself, so the name is passed as is.
-		return ['+set', 'name', p.name, '+set', 'model', p.model, '+set', 'headmodel', p.model];
+		// Team games use team_model/team_headmodel instead of model/headmodel.
+		return ['+set', 'name', p.name, '+set', 'model', p.model, '+set', 'headmodel', p.model,
+			'+set', 'team_model', p.model, '+set', 'team_headmodel', p.model];
 	}
 
 	// The browser also keeps the engine's own config (q3config.cfg) with the last used name and
@@ -82,7 +84,7 @@
 		var out = {};
 		var query = '';
 		try { query = decodeURIComponent(window.location.search.replace(/\+/g, ' ')); } catch (e) { return out; }
-		var re = /(?:^|[?&])(?:(?:seta?|setu)[\s=]+)?(name|model|headmodel)[\s=]+([^&]*)/gi;
+		var re = /(?:^|[?&])(?:(?:seta?|setu)[\s=]+)?(name|model|headmodel|team_model|team_headmodel)[\s=]+([^&]*)/gi;
 		var m;
 		while ((m = re.exec(query))) {
 			var key = m[1].toLowerCase();
@@ -109,7 +111,7 @@
 	}
 
 	function applyInEngine(p) {
-		var want = { name: p.name, model: p.model, headmodel: p.model };
+		var want = { name: p.name, model: p.model, headmodel: p.model, team_model: p.model, team_headmodel: p.model };
 		// Commands in the URL (e.g. /?set name Foo) win over the lobby. They are applied the same
 		// way, because the saved engine config would override them too.
 		var fromQuery = queryValues();
@@ -152,6 +154,43 @@
 		if (cls) e.className = cls;
 		if (text !== undefined) e.textContent = text;
 		return e;
+	}
+
+	// "Now playing" panel: server name, map, mode and who is online.
+	function onlinePanel() {
+		var box = el('div', 'qjs-lobby-online');
+		box.setAttribute('aria-live', 'polite');
+		var title = el('div', 'qjs-lobby-online-title', 'Checking the server\u2026');
+		var who = el('div', 'qjs-lobby-online-who');
+		box.appendChild(title);
+		box.appendChild(who);
+		var timer = null;
+		function load() {
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', '/admin/api/public/server');
+			xhr.timeout = 5000;
+			xhr.onload = function () {
+				var d = null;
+				try { d = xhr.status === 200 ? JSON.parse(xhr.responseText) : null; } catch (e) { d = null; }
+				if (!d || !d.online) {
+					title.textContent = 'The game server is not reachable right now.';
+					who.textContent = '';
+					return;
+				}
+				title.textContent = (d.hostname ? d.hostname + ' \u2013 ' : '') + d.map + ' (' + d.gametypeName + ')';
+				var names = d.humans.map(function (h) { return h.name; });
+				var bots = d.bots ? d.bots + ' bot' + (d.bots === 1 ? '' : 's') : '';
+				var text = names.length ? names.length + ' playing: ' + names.join(', ') + (bots ? ' + ' + bots : '')
+					: (bots ? 'No players yet, ' + bots + ' in the game.' : 'Nobody is playing right now.');
+				who.textContent = text;
+			};
+			xhr.onerror = xhr.ontimeout = function () { title.textContent = 'The game server is not reachable right now.'; };
+			xhr.send();
+		}
+		load();
+		timer = setInterval(function () { if (!document.hidden && box.isConnected) load(); }, 10000);
+		box.stop = function () { clearInterval(timer); };
+		return box;
 	}
 
 	function fetchLobby(done) {
@@ -197,6 +236,8 @@
 
 		var overlay = el('div', 'qjs-lobby');
 		var box = el('form', 'qjs-lobby-box');
+		var online = onlinePanel();
+		box.appendChild(online);
 		box.appendChild(el('h1', null, 'Choose your player'));
 
 		var label = el('label', null, 'Name');
@@ -300,6 +341,7 @@
 			}
 			var p = { name: name, model: selected };
 			savePlayer(p);
+			online.stop();
 			overlay.parentNode.removeChild(overlay);
 			if (window.location.hash === '#lobby') history.replaceState(null, '', window.location.pathname + window.location.search);
 			start(args(p));

@@ -16,6 +16,7 @@ const { Roster, RosterError, cleanName } = require('./lib/players');
 const { Stats } = require('./lib/stats');
 const { Bans, BanError } = require('./lib/bans');
 const { Audit } = require('./lib/audit');
+const { Presets, PresetError } = require('./lib/presets');
 const { parseCidrs, clientAddress } = require('./lib/netaddr');
 
 const HOST = '127.0.0.1';
@@ -60,6 +61,7 @@ const roster = new Roster(DATA_DIR);
 
 const bans = new Bans(DATA_DIR);
 const audit = new Audit(DATA_DIR);
+const presets = new Presets(DATA_DIR);
 
 // Logs an admin action to the container output and the audit log.
 function audited(ip, action, detail) {
@@ -129,7 +131,7 @@ setInterval(() => {
   }
 }, 2000).unref();
 
-let mapCache = { key: null, maps: [], bots: [], models: [], icons: {} };
+let mapCache = { key: null, maps: [], bots: [], models: [], icons: {}, mapInfo: {} };
 function available() {
   let key = '';
   try {
@@ -302,8 +304,40 @@ function backupData() {
     settings,
     players: roster.players,
     bans: bans.list,
+    presets: presets.list,
     stats: stats.exportState(),
   };
+}
+
+// Current server state for the lobby and the stats page, cached briefly.
+let serverCache = { at: 0, data: null };
+async function publicServerState() {
+  if (serverCache.data && Date.now() - serverCache.at < 5000) return serverCache.data;
+  let data;
+  try {
+    const [st, cl] = [await rcon.status(), await rcon.clients()];
+    const humans = cl.clients.filter(c => !c.bot).map(c => ({ name: cleanName(c.name), score: c.score }))
+      .sort((a, b) => b.score - a.score);
+    data = {
+      online: true,
+      hostname: cleanName(st.info.sv_hostname || ''),
+      map: cl.map || st.info.mapname || '',
+      gametype: Number(st.info.g_gametype) || 0,
+      gametypeName: GAMETYPES[Number(st.info.g_gametype) || 0] || '',
+      maxclients: Number(st.info.sv_maxclients) || 0,
+      humans,
+      bots: cl.clients.length - humans.length,
+    };
+  } catch (e) {
+    data = { online: false };
+  }
+  serverCache = { at: Date.now(), data };
+  return data;
+}
+
+// Statistics and match history: public when enabled, otherwise only for a logged-in admin.
+function statsVisible(req) {
+  return !!settings.statsPublic || (!disabledReason && !!getSession(req));
 }
 
 async function handlePublic(req, res, route, query) {
@@ -329,13 +363,25 @@ async function handlePublic(req, res, route, query) {
     return send(res, 200, png, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
   }
 
+  if (route === '/admin/api/public/server') {
+    rateLimit(req);
+    return send(res, 200, await publicServerState());
+  }
+
   if (route === '/admin/api/public/stats') {
     rateLimit(req);
-    if (!settings.statsPublic && !(!disabledReason && getSession(req))) throw new HttpError(404, 'Statistics are private');
+    if (!statsVisible(req)) throw new HttpError(404, 'Statistics are private');
     return send(res, 200, {
       players: statsReport(query.get('bots') === '1'),
       resetAt: stats.state.resetAt,
     });
+  }
+
+  if (route === '/admin/api/public/matches') {
+    rateLimit(req);
+    if (!statsVisible(req)) throw new HttpError(404, 'Statistics are private');
+    const limit = Math.max(1, Math.min(200, Number(query.get('limit')) || 50));
+    return send(res, 200, { matches: stats.recentMatches({ bots: query.get('bots') === '1', limit }), gametypes: GAMETYPES });
   }
 
   throw new HttpError(404, 'Not found');
@@ -458,14 +504,14 @@ async function handleApi(req, res, route, query) {
   const ip = clientIp(req);
 
   if (route === '/admin/api/state' && req.method === 'GET') {
-    const { maps, bots } = available();
+    const { maps, bots, mapInfo } = available();
     let pending = null;
     try { pending = await pendingMapChange(); } catch (e) { /* server offline */ }
     const fields = {};
     for (const [k, f] of Object.entries(FIELDS)) {
       fields[k] = { type: f.type, min: f.min, max: f.max, latched: !!f.latched };
     }
-    return send(res, 200, { settings, fields, gametypes: GAMETYPES, maps, bots, pendingMapChange: pending });
+    return send(res, 200, { settings, fields, gametypes: GAMETYPES, maps, mapInfo, bots, pendingMapChange: pending });
   }
 
   if (route === '/admin/api/status' && req.method === 'GET') {
@@ -594,6 +640,8 @@ async function handleApi(req, res, route, query) {
     const nextSettings = validate(body.settings || {}, defaults(), maps);
     const nextPlayers = roster.validate(body.players || [], models);
     const nextBans = bans.validateList(body.bans || []);
+    // Older backups have no presets: keep the current ones then.
+    const nextPresets = Array.isArray(body.presets) ? presets.validateList(body.presets) : null;
     // Keep the current state, then apply. Statistics are validated while importing,
     // so they go first: if they are invalid, nothing has been changed yet.
     const before = backupData();
@@ -611,11 +659,54 @@ async function handleApi(req, res, route, query) {
     settings = nextSettings;
     roster.save(nextPlayers, models);
     bans.replaceAll(nextBans);
-    audited(ip, 'backup-restore', `${nextPlayers.length} players, ${nextBans.length} bans`);
+    if (nextPresets) presets.replaceAll(nextPresets);
+    audited(ip, 'backup-restore', `${nextPlayers.length} players, ${nextBans.length} bans${nextPresets ? `, ${nextPresets.length} presets` : ''}`);
     let applied = true;
     try { await rcon.command('exec settings.cfg'); } catch (e) { applied = false; }
     enforceAll();
     return send(res, 200, { ok: true, applied });
+  }
+
+  if (route === '/admin/api/presets' && req.method === 'GET') {
+    return send(res, 200, { presets: presets.list });
+  }
+
+  if (route === '/admin/api/presets' && req.method === 'POST') {
+    const body = (await readJson(req)) || {};
+    const preset = presets.saveCurrent(body.name, settings);
+    audited(ip, 'preset-save', preset.name);
+    return send(res, 200, { ok: true, preset, presets: presets.list });
+  }
+
+  if (route === '/admin/api/presets' && req.method === 'DELETE') {
+    const gone = presets.remove(String(query.get('id') || ''));
+    audited(ip, 'preset-delete', gone.name);
+    return send(res, 200, { ok: true, presets: presets.list });
+  }
+
+  if (route === '/admin/api/presets/apply' && req.method === 'POST') {
+    const body = (await readJson(req)) || {};
+    const { preset, settings: next, dropped } = presets.resolve(String(body.id || ''), settings, available().maps);
+    store.save(next);
+    settings = next;
+    const changeMap = body.changeMap === true;
+    audited(ip, 'preset-apply', `${preset.name}${changeMap ? ' (map change)' : ''}`);
+    enforceAll();
+    let applied = true;
+    let applyError = null;
+    try {
+      await rcon.command('exec settings.cfg');
+      // Start the new rotation: latched settings such as the game type apply with the map load.
+      if (changeMap) await rcon.command('vstr d1');
+    } catch (e) {
+      applied = false;
+      applyError = e.message;
+    }
+    let pending = null;
+    if (!changeMap) {
+      try { pending = await pendingMapChange(); } catch (e) { /* server offline */ }
+    }
+    return send(res, 200, { ok: true, preset: preset.name, settings, dropped, applied, applyError, pendingMapChange: pending });
   }
 
   if (route === '/admin/api/console' && req.method === 'POST') {
@@ -651,7 +742,7 @@ const server = http.createServer(async (req, res) => {
     let status = 500;
     let message = 'Internal error';
     if (e instanceof HttpError) [status, message] = [e.status, e.message];
-    else if (e instanceof ValidationError || e instanceof RosterError || e instanceof BanError) [status, message] = [400, e.message];
+    else if (e instanceof ValidationError || e instanceof RosterError || e instanceof BanError || e instanceof PresetError) [status, message] = [400, e.message];
     else if (e instanceof RconError) [status, message] = [502, e.message];
     else if (e instanceof URIError) [status, message] = [400, 'Bad request'];
     else console.error('[admin]', e);
@@ -659,6 +750,9 @@ const server = http.createServer(async (req, res) => {
     else res.destroy();
   }
 });
+
+// Read the paks once at startup: map modes come from the BSP files, which takes a moment.
+setImmediate(() => { try { available(); } catch (e) { console.error('[admin] could not scan paks:', e.message); } });
 
 server.headersTimeout = 10000;
 server.requestTimeout = 90000;

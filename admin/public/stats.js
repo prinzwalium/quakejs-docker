@@ -30,6 +30,108 @@
     return new Date(ts).toLocaleDateString();
   }
 
+  const MODES = { 0: 'Free for all', 1: 'Tournament', 3: 'Team deathmatch', 4: 'Capture the flag' };
+  const TEAMS = { 1: 'Red', 2: 'Blue', 3: 'Spectator' };
+
+  function duration(sec) {
+    if (!sec) return '–';
+    const m = Math.floor(sec / 60);
+    const s = String(Math.round(sec % 60)).padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function winnerText(m) {
+    if (m.gametype >= 3 && m.red !== null && m.blue !== null) {
+      if (m.red === m.blue) return `Draw ${m.red}:${m.blue}`;
+      return `${m.red > m.blue ? 'Red' : 'Blue'} ${Math.max(m.red, m.blue)}:${Math.min(m.red, m.blue)}`;
+    }
+    return m.winners.length ? m.winners.join(', ') : 'Draw';
+  }
+
+  // Recent matches table. Returns { section, reload(bots) }.
+  function matchHistory() {
+    const section = el('div', 'matches');
+    const head = el('h3', null, 'Recent matches');
+    const wrap = el('div', 'table-wrap');
+    const table = el('table', 'players stats-table matches-table');
+    const thead = el('thead');
+    const tbody = el('tbody');
+    const hr = el('tr');
+    for (const [label, cls] of [['Played', null], ['Map', null], ['Mode', null], ['Winner', null], ['Players', 'num'], ['Duration', 'num']]) {
+      hr.append(el('th', cls, label));
+    }
+    thead.append(hr);
+    table.append(thead, tbody);
+    wrap.append(table);
+    const empty = el('p', 'muted', 'No finished matches yet.');
+    section.append(head, wrap, empty);
+    let matches = [];
+    let open = null;
+
+    function scoreboard(m) {
+      const tr = el('tr', 'detail');
+      const td = el('td');
+      td.colSpan = 6;
+      const t = el('table', 'players scoreboard');
+      const h = el('tr');
+      const teams = m.gametype >= 3;
+      h.append(el('th', null, 'Player'));
+      if (teams) h.append(el('th', null, 'Team'));
+      h.append(el('th', 'num', 'Score'));
+      t.append(h);
+      for (const p of m.players) {
+        const r = el('tr');
+        const name = p.name + (p.bot ? ' (bot)' : '');
+        // Bots can share a name: in free-for-all only the top score wins.
+        const won = m.winners.includes(p.name) && (teams || p.score === m.players[0].score);
+        r.append(el('td', won ? 'winner' : null, name));
+        if (teams) r.append(el('td', null, TEAMS[p.team] || '–'));
+        r.append(el('td', 'num', p.score));
+        t.append(r);
+      }
+      const facts = el('p', 'muted', `${MODES[m.gametype] || `Mode ${m.gametype}`} · ${new Date(m.time).toLocaleString()}${m.reason ? ` · ended by ${m.reason.toLowerCase()}` : ''}`);
+      td.append(t, facts);
+      tr.append(td);
+      return tr;
+    }
+
+    function render() {
+      const out = [];
+      for (const m of matches) {
+        const tr = el('tr', 'clickable');
+        tr.append(
+          el('td', null, ago(m.time)),
+          el('td', null, m.map || '–'),
+          el('td', null, MODES[m.gametype] || `Mode ${m.gametype}`),
+          el('td', null, winnerText(m)),
+          el('td', 'num', m.players.length),
+          el('td', 'num', duration(m.duration)),
+        );
+        tr.tabIndex = 0;
+        const toggle = () => { open = open === m ? null : m; render(); };
+        tr.addEventListener('click', toggle);
+        tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+        out.push(tr);
+        if (open === m) out.push(scoreboard(m));
+      }
+      tbody.replaceChildren(...out);
+      wrap.hidden = matches.length === 0;
+      empty.hidden = matches.length > 0;
+    }
+
+    async function reload(bots) {
+      const res = await fetch(`/admin/api/public/matches?bots=${bots ? 1 : 0}&limit=50`, { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const keep = open ? `${open.time}:${open.map}` : null;
+      matches = (await res.json()).matches;
+      open = matches.find(m => `${m.time}:${m.map}` === keep) || null;
+      render();
+    }
+
+    render();
+    return { section, reload };
+  }
+
   // Renders into container. Returns { reload() }.
   function mount(container, { onPrivate } = {}) {
     let rows = [];
@@ -53,7 +155,8 @@
     wrap.append(table);
     const empty = el('p', 'muted', 'No statistics yet. Play a match and they appear here.');
     empty.hidden = true;
-    container.replaceChildren(bar, wrap, empty);
+    const history = matchHistory();
+    container.replaceChildren(bar, wrap, empty, history.section);
 
     const headRow = el('tr');
     for (const [key, label, type] of COLUMNS) {
@@ -138,6 +241,7 @@
       if (!res.ok) throw new Error(`Could not load statistics (${res.status})`);
       rows = (await res.json()).players;
       render();
+      await history.reload(bots.checked);
     }
 
     bots.addEventListener('change', () => { reload().catch(() => {}); });
@@ -151,7 +255,27 @@
   if (page) {
     const priv = document.getElementById('stats-private');
     const table = mount(page, { onPrivate: () => { page.hidden = true; priv.hidden = false; } });
-    const refresh = () => { if (!document.hidden) table.reload().catch(() => {}); };
+    const now = document.getElementById('now-playing');
+    const showServer = async () => {
+      try {
+        const res = await fetch('/admin/api/public/server', { credentials: 'same-origin' });
+        const s = res.ok ? await res.json() : { online: false };
+        if (!s.online) {
+          now.textContent = 'The game server is not reachable right now.';
+        } else {
+          const n = s.humans.length;
+          let who = n ? `${n} playing: ${s.humans.map(h => h.name).join(', ')}` : 'nobody playing';
+          if (s.bots) who += ` + ${s.bots} bot${s.bots === 1 ? '' : 's'}`;
+          now.textContent = `Now playing: ${s.map} (${MODES[s.gametype] || s.gametypeName}) – ${who}`;
+        }
+        now.hidden = false;
+      } catch (e) { /* keep the last line */ }
+    };
+    const refresh = () => {
+      if (document.hidden) return;
+      table.reload().catch(() => {});
+      if (now) showServer();
+    };
     refresh();
     setInterval(refresh, 30000);
   }

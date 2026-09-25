@@ -36,6 +36,40 @@ if (process.getuid && process.getuid() === 0) {
   process.setuid(uid);
 }
 
+// Map paks that ship in the image (include/assets) but are only downloaded by the engine
+// when that map is loaded. Installing them for the server makes the maps selectable;
+// players' browsers still download each map pak on demand when it is played.
+const ASSETS_DIR = process.env.QJS_ASSETS_DIR || '/quakejs/html/assets';
+function installMapPaks() {
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, 'manifest.json'), 'utf8'));
+  } catch (e) {
+    console.error(`[init] no asset manifest: ${e.message}`);
+    return;
+  }
+  let installed = 0;
+  for (const entry of manifest) {
+    const m = /^baseq3\/([a-z0-9_-]+)\.pk3$/i.exec(entry.name || '');
+    if (!m || /^pak/i.test(m[1])) continue;
+    const src = path.join(ASSETS_DIR, 'baseq3', `${entry.checksum}-${m[1]}.pk3`);
+    const dest = path.join(GAME_DIRS[0], `${m[1]}.pk3`);
+    try {
+      const size = fs.statSync(src).size;
+      let current = -1;
+      try { current = fs.statSync(dest).size; } catch (e) { /* not installed */ }
+      if (current === size) continue;
+      fs.copyFileSync(src, `${dest}.tmp`);
+      fs.renameSync(`${dest}.tmp`, dest);
+      installed++;
+    } catch (e) {
+      console.error(`[init] could not install ${m[1]}.pk3: ${e.message}`);
+    }
+  }
+  if (installed) console.log(`[init] installed ${installed} map pak(s)`);
+}
+installMapPaks();
+
 const store = new Store({ dataDir: DATA_DIR, gameDirs: GAME_DIRS });
 const settings = store.load();
 fs.mkdirSync(DATA_DIR, { recursive: true });
