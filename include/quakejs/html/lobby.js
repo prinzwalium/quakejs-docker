@@ -51,6 +51,102 @@
 		return ['+set', 'name', p.name, '+set', 'model', p.model, '+set', 'headmodel', p.model];
 	}
 
+	// The browser also keeps the engine's own config (q3config.cfg) with the last used name and
+	// model, and the engine loads it again while connecting, which overrides the start arguments.
+	// So the choice is also set directly in the running engine until it has stuck, and changes
+	// made later in the in-game menu are saved back to the cookie.
+	function engine() {
+		var m = window.ioq3;
+		return m && m._Cvar_Set && m._Cvar_VariableString && m._free && m.allocate && m.intArrayFromString && m.Pointer_stringify ? m : null;
+	}
+
+	function withStrings(m, strings, fn) {
+		var ptrs = strings.map(function (s) { return m.allocate(m.intArrayFromString(s), 'i8', m.ALLOC_NORMAL); });
+		try {
+			return fn.apply(null, ptrs);
+		} finally {
+			ptrs.forEach(function (ptr) { m._free(ptr); });
+		}
+	}
+
+	function getCvar(m, name) {
+		return withStrings(m, [name], function (n) { return m.Pointer_stringify(m._Cvar_VariableString(n)); });
+	}
+
+	function setCvar(m, name, value) {
+		withStrings(m, [name, value], function (n, v) { m._Cvar_Set(n, v); });
+	}
+
+	// name/model/headmodel set by commands in the URL, e.g. "?set name Foo" or "?name=Foo".
+	function queryValues() {
+		var out = {};
+		var query = '';
+		try { query = decodeURIComponent(window.location.search.replace(/\+/g, ' ')); } catch (e) { return out; }
+		var re = /(?:^|[?&])(?:(?:seta?|setu)[\s=]+)?(name|model|headmodel)[\s=]+([^&]*)/gi;
+		var m;
+		while ((m = re.exec(query))) {
+			var key = m[1].toLowerCase();
+			var value = key === 'name' ? cleanName(m[2]) : cleanModel(m[2].trim());
+			if (value) out[key] = value;
+		}
+		return out;
+	}
+
+	function followInGameChanges(p) {
+		setInterval(function () {
+			var m = engine();
+			if (!m) return;
+			try {
+				var name = cleanName(getCvar(m, 'name'));
+				var model = cleanModel(getCvar(m, 'model'));
+				if (name && model && (name !== p.name || model !== p.model)) {
+					p.name = name;
+					p.model = model;
+					savePlayer(p);
+				}
+			} catch (e) { /* engine not available */ }
+		}, 5000);
+	}
+
+	function applyInEngine(p) {
+		var want = { name: p.name, model: p.model, headmodel: p.model };
+		// Commands in the URL (e.g. /?set name Foo) win over the lobby. They are applied the same
+		// way, because the saved engine config would override them too.
+		var fromQuery = queryValues();
+		Object.keys(fromQuery).forEach(function (k) { want[k] = fromQuery[k]; });
+		var begin = Date.now();
+		var okSince = 0;
+		var timer = setInterval(function () {
+			var m = engine();
+			var done = Date.now() - begin > 10 * 60 * 1000;
+			if (m) {
+				try {
+					// Only once the engine is initialised (its cvars exist).
+					if (getCvar(m, 'version')) {
+						var ok = true;
+						Object.keys(want).forEach(function (k) {
+							if (getCvar(m, k) !== want[k]) {
+								setCvar(m, k, want[k]);
+								ok = false;
+							}
+						});
+						var connected = !!getCvar(m, 'cl_currentServerAddress');
+						if (!ok || !connected) okSince = 0;
+						else if (!okSince) okSince = Date.now();
+						// Connected, and the values stayed as chosen for 20 seconds: the saved
+						// config has been loaded already and can't override them anymore.
+						if (okSince && Date.now() - okSince > 20000) done = true;
+					}
+				} catch (e) { /* engine still starting */ }
+			}
+			if (done) {
+				clearInterval(timer);
+				// Don't make one-off URL overrides the saved lobby choice.
+				if (!Object.keys(fromQuery).length) followInGameChanges(p);
+			}
+		}, 500);
+	}
+
 	function el(tag, cls, text) {
 		var e = document.createElement(tag);
 		if (cls) e.className = cls;
@@ -207,6 +303,7 @@
 			overlay.parentNode.removeChild(overlay);
 			if (window.location.hash === '#lobby') history.replaceState(null, '', window.location.pathname + window.location.search);
 			start(args(p));
+			applyInEngine(p);
 			showChangeLink();
 		});
 
@@ -221,6 +318,7 @@
 			var saved = loadPlayer();
 			if (saved && window.location.hash !== '#lobby') {
 				start(args(saved));
+				applyInEngine(saved);
 				showChangeLink();
 				return;
 			}

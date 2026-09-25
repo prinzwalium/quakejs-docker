@@ -65,6 +65,7 @@ echo "lobby:"
 curl -fsS "$BASE/admin/api/public/lobby" | grep -q '"id":"sarge"'
 curl -fsS -o /dev/null -w '%{content_type}\n' "$BASE/admin/api/public/icon/sarge/default.png" | grep -q image/png
 curl -fsS "$BASE/lobby.js" | grep -q qjsLobby
+curl -fsS "$BASE/lobby.js" | grep -q applyInEngine
 
 echo "disconnect page (client POSTs to / after leaving the game):"
 curl -fsS -X POST -d 'error=test' "$BASE/" | grep -q 'You were disconnected'
