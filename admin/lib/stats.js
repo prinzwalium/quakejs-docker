@@ -107,6 +107,40 @@ class Stats {
     this.save();
   }
 
+  // Replaces the totals with imported ones (from a backup). Throws on invalid data.
+  // The position in the current game log is kept, so nothing is counted twice.
+  importState(input) {
+    if (!input || typeof input !== 'object' || input.version !== 1 || !input.names || typeof input.names !== 'object') {
+      throw new Error('Invalid statistics in backup');
+    }
+    const entries = Object.values(input.names);
+    if (entries.length > MAX_NAMES) throw new Error('Too many players in backup statistics');
+    const names = {};
+    const num = (v) => (Number.isFinite(Number(v)) ? Math.max(-1e9, Math.min(1e9, Math.trunc(Number(v)))) : 0);
+    for (const p of entries) {
+      if (!p || typeof p !== 'object') continue;
+      const name = cleanName(p.name || '');
+      if (!name) continue;
+      const t = emptyTotals();
+      for (const f of Object.keys(t)) if (f !== 'weapons') t[f] = num(p[f]);
+      if (p.weapons && typeof p.weapons === 'object') {
+        for (const [w, n] of Object.entries(p.weapons).slice(0, 50)) t.weapons[String(w).slice(0, 40)] = num(n);
+      }
+      names[name.toLowerCase()] = Object.assign({
+        name, bot: !!p.bot, model: typeof p.model === 'string' ? p.model.slice(0, 65) : '',
+        firstSeen: num(p.firstSeen) || Date.now(), lastSeen: num(p.lastSeen) || Date.now(),
+      }, t);
+    }
+    this.state = { version: 1, log: this.state.log, names, resetAt: num(input.resetAt) || Date.now() };
+    this.dirty = true;
+    this.save();
+  }
+
+  // Totals for a backup (without the log position, which belongs to this server).
+  exportState() {
+    return { version: 1, names: this.state.names, resetAt: this.state.resetAt };
+  }
+
   // Reads new lines from the log. live=false while catching up at container start.
   ingest(live = true) {
     let st;

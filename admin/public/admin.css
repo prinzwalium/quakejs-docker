@@ -198,3 +198,12 @@ a.button:hover { border-color: var(--muted); }
 .recent li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
 .recent li > span:first-child { min-width: 140px; font-weight: 600; }
 .recent select { width: auto; flex: 0 1 200px; margin-top: 0; }
+
+.ban-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 12px; align-items: end; margin-bottom: 12px; }
+.ban-form button { margin-bottom: 12px; }
+.file-button { position: relative; cursor: pointer; margin: 0; color: var(--text); font-size: 15px; }
+.file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.audit td { font-size: 13px; vertical-align: top; }
+.audit td:last-child { text-align: left; overflow-wrap: anywhere; }
+.players td .row { justify-content: flex-end; }
+#audit-card .table-wrap { max-height: 480px; overflow-y: auto; }

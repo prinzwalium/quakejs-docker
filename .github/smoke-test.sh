@@ -85,4 +85,25 @@ curl -fsS -b "$JAR" -X PUT -H 'X-Requested-With: qjs-admin' -H 'Content-Type: ap
   -d '{"players":[{"name":"Smoke","aliases":["Tester"],"model":"sarge"}]}' "$BASE/admin/api/players" | grep -q '"name":"Smoke"'
 curl -fsS "$BASE/admin/api/public/lobby" | grep -q '"name":"Smoke"'
 
+echo "healthcheck:"
+docker exec "$NAME" node /quakejs/admin/healthcheck.js
+
+echo "bans:"
+curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  -d '{"ip":"203.0.113.9","reason":"smoke","duration":3600}' "$BASE/admin/api/bans" | grep -q '"ip":"203.0.113.9"'
+curl -fsS -b "$JAR" "$BASE/admin/api/bans" | grep -q '"reason":"smoke"'
+
+echo "audit log:"
+curl -fsS -b "$JAR" "$BASE/admin/api/audit" | grep -q '"action":"ban"'
+
+echo "backup round trip:"
+curl -fsS -b "$JAR" -o /tmp/qjs-backup.json "$BASE/admin/api/backup"
+grep -q '"format": "quakejs-admin-backup"' /tmp/qjs-backup.json
+curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  --data-binary @/tmp/qjs-backup.json "$BASE/admin/api/backup" | grep -q '"ok":true'
+rm -f /tmp/qjs-backup.json
+
+echo "container health status:"
+docker inspect --format '{{.State.Health.Status}}' "$NAME"
+
 echo "smoke test passed"

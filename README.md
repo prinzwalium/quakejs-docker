@@ -74,6 +74,25 @@ Changes are applied to the running server when you save. Max players, game type 
   Statistics are kept in `/data/stats.json`; *Reset statistics* archives them to `/data/stats-archive/` first.
   The game log is archived to `/data/logs/` (last 20) at every container start.
 
+#### Bans, audit log, backup and health
+
+- **Bans** (admin page → *Bans*, or *Ban* next to a player): by IP address or by name, with a reason and a duration
+  (or permanent). Banned players are kicked when they join; bans are kept in `/data/bans.json`.
+- **Audit log** (admin page → *Audit log*): logins, failed logins, settings, player list, bans, kicks, console
+  commands, restarts and restores, with time and address. Kept in `/data/audit.log` (rotated at 1 MB).
+- **Backup** (admin page → *Backup*): one JSON file with settings, player list, bans and statistics (not the rcon
+  password). Restoring validates the file first and keeps the previous state in `/data/backups/`.
+- **Healthcheck:** the image reports *healthy* when nginx, the admin interface and the game server all answer
+  (`docker ps` / `docker inspect`).
+
+#### Real player addresses behind a reverse proxy
+
+Behind a reverse proxy, every connection comes from the proxy. Set `TRUSTED_PROXIES` to the proxy's address or
+network (IPv4 / CIDR, comma separated, e.g. `172.16.0.0/12` for a proxy container on a Docker network) and make
+sure the proxy sends `X-Forwarded-For` (most do by default). The game server, bans, the login lockout and the
+audit log then use the player's real address. `X-Forwarded-For` is only believed when it comes from a trusted proxy.
+(Ported from [treyyoder/quakejs-docker](https://github.com/treyyoder/quakejs-docker).)
+
 #### docker-compose.yml
 
 ```

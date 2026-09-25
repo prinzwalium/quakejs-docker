@@ -95,9 +95,10 @@ class Rcon {
       const m = /^\s*(\d+)\s+(-?\d+)\s+(\S+)\s+(.*?)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s*$/.exec(l);
       // Kicked or disconnected clients stay listed as "ZMBI" for a few seconds.
       if (m && m[3] !== 'ZMBI') {
+        const ipm = /^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/.exec(m[6]);
         clients.push({
           num: Number(m[1]), score: Number(m[2]), ping: m[3], name: m[4].replace(/\^./g, ''),
-          bot: m[6] === 'bot',
+          bot: m[6] === 'bot', ip: ipm ? ipm[1] : null,
         });
       }
     }
