@@ -92,7 +92,10 @@ presets="$(curl -fsS -b "$JAR" "$BASE/admin/api/presets")"
 echo "$presets" | grep -q '"name":"Capture the flag"'
 ctf="$(echo "$presets" | sed 's/.*"id":"\([a-f0-9]*\)","name":"Capture the flag".*/\1/')"
 curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
-  -d "{\"id\":\"$ctf\",\"changeMap\":true}" "$BASE/admin/api/presets/apply" | grep -q '"gametype":4'
+  -d "{\"id\":\"$ctf\",\"changeMap\":true}" "$BASE/admin/api/presets/apply" > /tmp/qjs-apply.json
+grep -q '"gametype":4' /tmp/qjs-apply.json
+grep -q '"applied":true' /tmp/qjs-apply.json || { echo "preset not applied: $(cat /tmp/qjs-apply.json | tail -c 200)"; exit 1; }
+rm -f /tmp/qjs-apply.json
 echo "waiting for the CTF map..."
 for i in $(seq 1 20); do
   out="$(curl -fsS -b "$JAR" "$BASE/admin/api/status" || true)"

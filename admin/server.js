@@ -312,7 +312,7 @@ function backupData() {
 // Current server state for the lobby and the stats page, cached briefly.
 let serverCache = { at: 0, data: null };
 async function publicServerState() {
-  if (serverCache.data && Date.now() - serverCache.at < 5000) return serverCache.data;
+  if (serverCache.data && Date.now() - serverCache.at < 10000) return serverCache.data;
   let data;
   try {
     const [st, cl] = [await rcon.status(), await rcon.clients()];
