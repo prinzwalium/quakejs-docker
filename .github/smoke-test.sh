@@ -52,9 +52,15 @@ case "$out" in
   *) echo "game server did not come online: $out"; exit 1 ;;
 esac
 
-echo "admin state:"
-curl -fsS -b "$JAR" "$BASE/admin/api/state" | head -c 300
+echo "admin state (bundled map paks are installed):"
+state="$(curl -fsS -b "$JAR" "$BASE/admin/api/state")"
+echo "$state" | head -c 300
 echo
+echo "$state" | grep -q '"q3wctf1"'
+echo "$state" | grep -q '"mapInfo"'
+
+echo "public server info:"
+curl -fsS "$BASE/admin/api/public/server" | grep -q '"online":true'
 
 echo "rcon via admin:"
 curl -fsS -b "$JAR" -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
@@ -79,6 +85,31 @@ echo "make statistics public:"
 curl -fsS -b "$JAR" -X PUT -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
   -d '{"statsPublic":true}' "$BASE/admin/api/settings" | grep -q '"statsPublic":true'
 curl -fsS "$BASE/admin/api/public/stats?bots=1" | grep -q '"players"'
+curl -fsS "$BASE/admin/api/public/matches?bots=1" | grep -q '"matches":\['
+
+echo "presets:"
+presets="$(curl -fsS -b "$JAR" "$BASE/admin/api/presets")"
+echo "$presets" | grep -q '"name":"Capture the flag"'
+ctf="$(echo "$presets" | sed 's/.*"id":"\([a-f0-9]*\)","name":"Capture the flag".*/\1/')"
+curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  -d "{\"id\":\"$ctf\",\"changeMap\":true}" "$BASE/admin/api/presets/apply" > /tmp/qjs-apply.json
+grep -q '"gametype":4' /tmp/qjs-apply.json
+grep -q '"applied":true' /tmp/qjs-apply.json || { echo "preset not applied: $(cat /tmp/qjs-apply.json | tail -c 200)"; exit 1; }
+rm -f /tmp/qjs-apply.json
+echo "waiting for the CTF map..."
+for i in $(seq 1 20); do
+  out="$(curl -fsS -b "$JAR" "$BASE/admin/api/status" || true)"
+  case "$out" in
+    *'"map":"q3wctf1"'*'"gametype":4'*) echo "$out"; break ;;
+  esac
+  sleep 3
+done
+case "$out" in
+  *'"map":"q3wctf1"'*'"gametype":4'*) ;;
+  *) echo "CTF preset did not load q3wctf1: $out"; exit 1 ;;
+esac
+curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
+  -d '{"name":"Smoke preset"}' "$BASE/admin/api/presets" | grep -q '"name":"Smoke preset"'
 
 echo "player roster:"
 curl -fsS -b "$JAR" -X PUT -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
@@ -99,6 +130,7 @@ curl -fsS -b "$JAR" "$BASE/admin/api/audit" | grep -q '"action":"ban"'
 echo "backup round trip:"
 curl -fsS -b "$JAR" -o /tmp/qjs-backup.json "$BASE/admin/api/backup"
 grep -q '"format": "quakejs-admin-backup"' /tmp/qjs-backup.json
+grep -q '"name": "Smoke preset"' /tmp/qjs-backup.json
 curl -fsS -b "$JAR" -X POST -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
   --data-binary @/tmp/qjs-backup.json "$BASE/admin/api/backup" | grep -q '"ok":true'
 rm -f /tmp/qjs-backup.json

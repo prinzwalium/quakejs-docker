@@ -207,3 +207,24 @@ a.button:hover { border-color: var(--muted); }
 .audit td:last-child { text-align: left; overflow-wrap: anywhere; }
 .players td .row { justify-content: flex-end; }
 #audit-card .table-wrap { max-height: 480px; overflow-y: auto; }
+
+.rotation li > span.warn { color: var(--bad); }
+.rotation li > span.warn::after { content: " ⚠"; }
+
+.matches { margin-top: 8px; }
+.matches-table { min-width: 560px; }
+.stats-table.matches-table td:last-child { text-align: right; }
+.stats-table.matches-table tr.detail > td { text-align: left; }
+.scoreboard { max-width: 480px; margin: 4px 0 8px; }
+.scoreboard td.winner { font-weight: 600; color: var(--accent); }
+.scoreboard td.winner::after { content: " 🏆"; }
+.now-playing { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); overflow-wrap: anywhere; }
+.presets li > .preset-info { flex: 1 1 260px; font-size: 13px; }
+.presets li > .row { margin-left: auto; }
+#preset-form { margin-top: 12px; }
+@media (max-width: 600px) {
+  .matches-table { min-width: 0; }
+  .matches-table thead th:nth-child(4), .matches-table tr.clickable > td:nth-child(4) { display: table-cell; }
+  .matches-table tr.clickable > :nth-child(3), .matches-table tr.clickable > :nth-child(5),
+  .matches-table thead th:nth-child(3), .matches-table thead th:nth-child(5) { display: none; }
+}

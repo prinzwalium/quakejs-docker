@@ -23,6 +23,7 @@ const FIELDS = {
   timelimit:     { type: 'int', min: 0, max: 999, def: 10, cvar: 'timelimit' },
   capturelimit:  { type: 'int', min: 0, max: 999, def: 8, cvar: 'capturelimit' },
   friendlyfire:  { type: 'bool', def: false, cvar: 'g_friendlyfire' },
+  teamAutoJoin:  { type: 'bool', def: true, cvar: 'g_teamAutoJoin' },
   quadfactor:    { type: 'int', min: 1, max: 10, def: 3, cvar: 'g_quadfactor' },
   weaponrespawn: { type: 'int', min: 1, max: 60, def: 3, cvar: 'g_weaponrespawn' },
   forcerespawn:  { type: 'int', min: 0, max: 60, def: 0, cvar: 'g_forcerespawn' },

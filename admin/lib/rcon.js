@@ -5,6 +5,12 @@
 
 const OOB = Buffer.from([0xff, 0xff, 0xff, 0xff]);
 
+// The server drops out-of-band packets (getstatus and rcon) from one address beyond a burst
+// of 10, refilled at one per second (ioq3 SVC_RateLimitAddress), without answering. Stay
+// below that with a little room for the healthcheck, which also asks from 127.0.0.1.
+const BURST = 8;
+const REFILL_MS = 1000;
+
 class RconError extends Error {}
 
 class Rcon {
@@ -14,6 +20,26 @@ class Rcon {
     this.timeoutMs = timeoutMs;
     this.settleMs = settleMs;
     this.queue = Promise.resolve();
+    this.bucket = 0;
+    this.bucketAt = Date.now();
+  }
+
+  // Waits until one more packet fits into the server's rate limit, then counts it.
+  async _throttle() {
+    for (;;) {
+      const now = Date.now();
+      const drained = Math.floor((now - this.bucketAt) / REFILL_MS);
+      if (drained > 0) {
+        this.bucket = Math.max(0, this.bucket - drained);
+        this.bucketAt += drained * REFILL_MS;
+      }
+      if (this.bucket === 0) this.bucketAt = now;
+      if (this.bucket < BURST) {
+        this.bucket++;
+        return;
+      }
+      await new Promise(r => setTimeout(r, this.bucketAt + REFILL_MS - now + 5));
+    }
   }
 
   // Sends one OOB packet and collects the replies. Long rcon output arrives in several
@@ -56,9 +82,10 @@ class Rcon {
     });
   }
 
-  // Requests are serialized: the server rate-limits out-of-band packets.
+  // Requests are serialized and paced: the server rate-limits out-of-band packets.
   _enqueue(fn) {
-    const run = this.queue.then(fn, fn);
+    const paced = () => this._throttle().then(fn);
+    const run = this.queue.then(paced, paced);
     this.queue = run.catch(() => {});
     return run;
   }

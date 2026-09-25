@@ -16,6 +16,7 @@ const WORLD = 1022;
 const MAX_NAMES = 5000;
 const MAX_READ = 4 * 1024 * 1024;
 const MAX_LINE = 4096;
+const MAX_MATCHES = 200;
 
 const WEAPONS = {
   MOD_GAUNTLET: 'Gauntlet',
@@ -51,7 +52,7 @@ function emptyTotals() {
 }
 
 function emptyState() {
-  return { version: 1, log: { ino: null, offset: 0 }, names: {}, resetAt: Date.now() };
+  return { version: 1, log: { ino: null, offset: 0 }, names: {}, matches: [], resetAt: Date.now() };
 }
 
 class Stats {
@@ -70,7 +71,10 @@ class Stats {
   load() {
     try {
       const s = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      if (s && s.version === 1 && s.names && s.log) return s;
+      if (s && s.version === 1 && s.names && s.log) {
+        if (!Array.isArray(s.matches)) s.matches = [];
+        return s;
+      }
     } catch (e) {
       if (e.code !== 'ENOENT') console.error(`[stats] ignoring unreadable ${this.file}: ${e.message}`);
     }
@@ -131,14 +135,29 @@ class Stats {
         firstSeen: num(p.firstSeen) || Date.now(), lastSeen: num(p.lastSeen) || Date.now(),
       }, t);
     }
-    this.state = { version: 1, log: this.state.log, names, resetAt: num(input.resetAt) || Date.now() };
+    const matches = [];
+    for (const mt of (Array.isArray(input.matches) ? input.matches : []).slice(0, MAX_MATCHES)) {
+      if (!mt || typeof mt !== 'object' || !Array.isArray(mt.players)) continue;
+      const players = mt.players.slice(0, 64).map(pl => ({
+        name: cleanName((pl && pl.name) || ''), score: num(pl && pl.score), team: num(pl && pl.team), bot: !!(pl && pl.bot),
+      })).filter(pl => pl.name);
+      matches.push({
+        time: num(mt.time), map: String(mt.map || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64),
+        gametype: num(mt.gametype), duration: num(mt.duration), reason: String(mt.reason || '').slice(0, 60),
+        red: mt.red === null || mt.red === undefined ? null : num(mt.red),
+        blue: mt.blue === null || mt.blue === undefined ? null : num(mt.blue),
+        players,
+        winners: (Array.isArray(mt.winners) ? mt.winners : []).slice(0, 64).map(w => cleanName(w)).filter(Boolean),
+      });
+    }
+    this.state = { version: 1, log: this.state.log, names, matches, resetAt: num(input.resetAt) || Date.now() };
     this.dirty = true;
     this.save();
   }
 
   // Totals for a backup (without the log position, which belongs to this server).
   exportState() {
-    return { version: 1, names: this.state.names, resetAt: this.state.resetAt };
+    return { version: 1, names: this.state.names, matches: this.state.matches, resetAt: this.state.resetAt };
   }
 
   // Reads new lines from the log. live=false while catching up at container start.
@@ -209,12 +228,12 @@ class Stats {
   }
 
   line(raw, live) {
-    const m = /^\s*\d+:\d+\s+([A-Za-z]+):\s?(.*)$/.exec(raw);
+    const m = /^\s*(\d+):(\d+)\s+([A-Za-z]+):\s?(.*)$/.exec(raw);
     if (!m) {
       this.matchLine(raw.trim());
       return;
     }
-    const [, event, rest] = m;
+    const [, min, sec, event, rest] = m;
     // The score lines follow "Exit:" directly; the first other line completes the match.
     // (With only bots on the server the intermission may never end, so don't wait for ShutdownGame.)
     if (this.match && this.match.exited && !['Exit', 'score', 'red'].includes(event)) this.finishMatch();
@@ -269,7 +288,12 @@ class Stats {
         break;
       }
       case 'Exit':
-        if (this.match) this.match.exited = true;
+        if (this.match) {
+          this.match.exited = true;
+          // Log times count from the start of the map, so this is the length of the match.
+          this.match.duration = Number(min) * 60 + Number(sec);
+          this.match.reason = rest.trim().slice(0, 60);
+        }
         break;
       case 'ShutdownGame':
         this.finishMatch();
@@ -294,7 +318,7 @@ class Stats {
     if (sm) {
       const c = this.clients.get(Number(sm[2]));
       const name = c ? c.name : cleanName(sm[3]);
-      if (name) this.match.scores.push({ name, score: Number(sm[1]), team: c ? c.team : 0 });
+      if (name) this.match.scores.push({ name, score: Number(sm[1]), team: c ? c.team : 0, bot: c ? c.bot : false });
     }
   }
 
@@ -318,6 +342,25 @@ class Stats {
       if (winners.includes(s.name)) p.wins++;
       if (s.score > p.bestScore) p.bestScore = s.score;
     }
+    this.state.matches.unshift({
+      time: Date.now(),
+      map: m.map,
+      gametype: m.gametype,
+      duration: m.duration || 0,
+      reason: m.reason || '',
+      red: m.red,
+      blue: m.blue,
+      players: m.scores.slice().sort((a, b) => b.score - a.score).slice(0, 64),
+      winners,
+    });
+    this.state.matches.length = Math.min(this.state.matches.length, MAX_MATCHES);
+  }
+
+  // Recent matches, newest first. Matches with only bots are left out unless bots is set.
+  recentMatches({ bots, limit = 50 }) {
+    return this.state.matches
+      .filter(m => bots || m.players.some(p => !p.bot))
+      .slice(0, Math.max(1, Math.min(MAX_MATCHES, limit)));
   }
 
   // Leaderboard rows, grouped by roster entry. roster.resolve(name) -> entry or null.

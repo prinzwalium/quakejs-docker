@@ -61,7 +61,7 @@
   async function showApp() {
     showOnly('app');
     await loadState();
-    await Promise.all([refreshStatus(), loadPlayers(), loadStats(), loadBans(), loadAudit()]);
+    await Promise.all([refreshStatus(), loadPlayers(), loadStats(), loadBans(), loadAudit(), loadPresets()]);
     clearInterval(statusTimer);
     statusTimer = setInterval(() => { if (!document.hidden) refreshStatus(); }, 5000);
   }
@@ -144,12 +144,31 @@
 
   let rotation = [];
 
+  // Game modes a map is made for (from the server's paks), e.g. "q3wctf1 (CTF)".
+  const MODE_SHORT = { 0: 'FFA', 1: '1v1', 3: 'TDM', 4: 'CTF' };
+  function mapTypes(m) {
+    const info = state && state.mapInfo && state.mapInfo[m];
+    return info && Array.isArray(info.types) ? info.types : null;
+  }
+  function mapLabel(m) {
+    const t = mapTypes(m);
+    return t && t.length ? `${m} (${t.map(x => MODE_SHORT[x]).join(', ')})` : m;
+  }
+  function mapFits(m, gametype) {
+    const t = mapTypes(m);
+    return !t || !t.length || t.includes(gametype);
+  }
+
   function renderRotation() {
     const ol = $('rotation');
     ol.replaceChildren(...rotation.map((m, i) => {
       const li = document.createElement('li');
       const span = document.createElement('span');
-      span.textContent = m;
+      span.textContent = mapLabel(m);
+      if (!mapFits(m, Number($('gametype').value))) {
+        span.className = 'warn';
+        span.title = `This map is not made for ${state.gametypes[$('gametype').value]}`;
+      }
       const btns = document.createElement('span');
       btns.className = 'row';
       const mk = (label, title, fn, disabled) => {
@@ -187,8 +206,8 @@
     rotation = s.rotation.slice();
     renderRotation();
     const maps = state.maps.length ? state.maps : s.rotation;
-    fillSelect($('rotation-add'), maps.map(m => [m, m]));
-    fillSelect($('act-map'), maps.map(m => [m, m]));
+    fillSelect($('rotation-add'), maps.map(m => [m, mapLabel(m)]));
+    fillSelect($('act-map'), maps.map(m => [m, mapLabel(m)]));
     fillSelect($('act-bot'), state.bots.map(b => [b, b]));
     showPending(state.pendingMapChange);
   }
@@ -202,6 +221,8 @@
       if (!el) continue;
       body[k] = f.type === 'bool' ? el.checked : (f.type === 'int' ? Number(el.value) : el.value);
     }
+    const unfit = rotation.filter(m => !mapFits(m, body.gametype));
+    if (unfit.length && !confirm(`These maps are not made for ${state.gametypes[body.gametype]}: ${unfit.join(', ')}.\nSave anyway?`)) return;
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
@@ -270,6 +291,7 @@
   });
 
   $('settings-form').addEventListener('submit', saveSettings);
+  $('gametype').addEventListener('change', () => renderRotation());
 
   $('rotation-add-btn').addEventListener('click', () => {
     const m = $('rotation-add').value;
@@ -531,6 +553,98 @@
     }));
   }
 
+  // ------------------------------------------------------------ presets
+
+  function presetSummary(ps) {
+    const s = ps.settings;
+    const parts = [state && state.gametypes ? state.gametypes[s.gametype] : MODE_SHORT[s.gametype]];
+    if (s.gametype === 4) parts.push(`capture limit ${s.capturelimit || 'none'}`);
+    else parts.push(`frag limit ${s.fraglimit || 'none'}`);
+    parts.push(`time limit ${s.timelimit ? `${s.timelimit} min` : 'none'}`);
+    const known = state && state.maps.length ? s.rotation.filter(m => state.maps.includes(m)) : s.rotation;
+    parts.push(`maps: ${known.join(', ') || 'none available'}`);
+    return parts.join(' · ');
+  }
+
+  async function applyPreset(ps, changeMap) {
+    const what = changeMap ? `Apply "${ps.name}" and load its first map now? Players are moved to the new map.` : `Apply "${ps.name}"? Mode and rotation changes start with the next map.`;
+    if (!confirm(what)) return;
+    try {
+      const r = await api('POST', 'presets/apply', { id: ps.id, changeMap });
+      await loadState();
+      let msg = `Preset "${r.preset}" applied`;
+      if (r.dropped && r.dropped.length) msg += ` (not on this server: ${r.dropped.join(', ')})`;
+      if (!r.applied) toast(`${msg}. It takes effect when the game server is running again (${r.applyError}).`, true);
+      else toast(msg);
+      loadAudit();
+      setTimeout(refreshStatus, changeMap ? 3000 : 0);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  function renderPresets(list) {
+    const ul = $('presets');
+    if (!list.length) {
+      const li = document.createElement('li');
+      li.className = 'muted';
+      li.textContent = 'No presets yet.';
+      ul.replaceChildren(li);
+      return;
+    }
+    ul.replaceChildren(...list.map((ps) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = ps.name;
+      const info = document.createElement('span');
+      info.className = 'muted preset-info';
+      info.textContent = presetSummary(ps);
+      const btns = document.createElement('span');
+      btns.className = 'row';
+      const mk = (text, cls, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls;
+        b.textContent = text;
+        b.addEventListener('click', fn);
+        btns.append(b);
+      };
+      mk('Apply', 'secondary small', () => applyPreset(ps, false));
+      mk('Apply & change map', 'small', () => applyPreset(ps, true));
+      mk('Delete', 'danger small', async () => {
+        if (!confirm(`Delete the preset "${ps.name}"?`)) return;
+        try {
+          renderPresets((await api('DELETE', `presets?id=${encodeURIComponent(ps.id)}`)).presets);
+          toast('Preset deleted');
+          loadAudit();
+        } catch (e) {
+          toast(e.message, true);
+        }
+      });
+      li.append(name, info, btns);
+      return li;
+    }));
+  }
+
+  async function loadPresets() {
+    try { renderPresets((await api('GET', 'presets')).presets); } catch (e) { toast(e.message, true); }
+  }
+
+  $('preset-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const name = $('preset-name').value.trim();
+    if (!name) return;
+    try {
+      const r = await api('POST', 'presets', { name });
+      renderPresets(r.presets);
+      $('preset-name').value = '';
+      toast(`Saved the current settings as "${r.preset.name}". Unsaved changes in the settings form are not included.`);
+      loadAudit();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
+
   async function loadBans() {
     try { renderBans((await api('GET', 'bans')).bans); } catch (e) { toast(e.message, true); }
   }
@@ -606,7 +720,7 @@
     const file = ev.target.files[0];
     ev.target.value = '';
     if (!file) return;
-    if (!confirm(`Restore "${file.name}"? This replaces the settings, the player list, bans and statistics.`)) return;
+    if (!confirm(`Restore "${file.name}"? This replaces the settings, the player list, bans, presets and statistics.`)) return;
     let data;
     try {
       data = JSON.parse(await file.text());
@@ -618,7 +732,7 @@
       const r = await api('POST', 'backup', data);
       toast(r.applied ? 'Backup restored' : 'Backup restored; settings apply when the game server is running again');
       await loadState();
-      await Promise.all([loadPlayers(), loadStats(), loadBans(), loadAudit(), refreshStatus()]);
+      await Promise.all([loadPlayers(), loadStats(), loadBans(), loadAudit(), refreshStatus(), loadPresets()]);
     } catch (e) {
       toast(e.message, true);
     }

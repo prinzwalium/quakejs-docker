@@ -36,8 +36,12 @@ Send all you friends/coworkers the link: ex. http://localhost:8080 and start fra
 
 The image includes a web interface at `/admin/` (e.g. http://localhost:8080/admin/) to manage the server:
 
-- **Settings:** server name, message of the day, join password, max players, game type, frag/time/capture limits, friendly fire, quad factor, respawn times, bots (allowed, fill up to N players, skill)
-- **Map rotation:** built from the maps the server actually has, in any order
+- **Settings:** server name, message of the day, join password, max players, game type, frag/time/capture limits, friendly fire, team auto-join, quad factor, respawn times, bots (allowed, fill up to N players, skill)
+- **Map rotation:** built from the maps the server actually has, in any order. Each map shows the game types it
+  is made for (e.g. `q3wctf1 (CTF)`), and saving warns about maps that don't fit the selected game type.
+- **Presets:** named sets of game settings (mode, limits, bots, map rotation) applied with one click, optionally
+  with an immediate map change. *Free for all*, *Capture the flag* and *Tournament 1v1* are included; save your
+  own from the current settings. Kept in `/data/presets.json`.
 - **Live control:** current map and players, change map, restart match, skip to the next map, add/kick bots, kick players, send a message to all players, a console for any other server command, and a game server restart
 
 It is disabled unless you set `ADMIN_PASSWORD` (at least 12 characters):
@@ -59,17 +63,25 @@ Security:
 
 Changes are applied to the running server when you save. Max players, game type and "bots allowed" take effect when the next map loads.
 
+Maps: besides the id Software maps, the image contains three CTF maps (`q3wctf1`–`q3wctf3`), three Rocket Arena
+maps (`ra3map1`, `ra3map11`, `ra3map12`) and `ztn3tourney1`. They are installed for the server at every start and
+players download them automatically when one of them is played. In team modes, new players join a team
+automatically unless *team auto-join* is off (then they start as spectators).
+
 #### Players and statistics
 
 - **Lobby:** before the game starts, players choose a name (Quake color codes like `^1` work) and a player model.
   The choice is saved in a cookie, so the next visit goes straight into the game. Open `/#lobby` or click
-  *Change player* (top right, shown for a few seconds) to change it.
+  *Change player* (top right, shown for a few seconds) to change it. The lobby also shows the current map and mode
+  and who is playing.
 - **Player list** (admin page → *Players*): known players with the other names they play under and a default model.
   The lobby suggests these names. Set *Player names* to *Only players on this list* to kick everyone else
   (bots are never kicked). *Recently seen names* lists names that are not on the list yet.
 - **Statistics** (admin page → *Statistics*, and `/stats/`): kills, deaths, K/D, matches, wins, best score,
   favourite weapon and more per player, collected from the game log. All names of a player on the list are
   combined. Bots are hidden unless *Show bots* is ticked; kills against bots still count.
+  *Recent matches* lists the last 200 matches with map, mode, winner, duration and the final scoreboard
+  (matches with only bots are hidden unless *Show bots* is ticked). The stats page also shows what is being played right now.
   The stats page is private until you tick *Stats page is public*.
   Statistics are kept in `/data/stats.json`; *Reset statistics* archives them to `/data/stats-archive/` first.
   The game log is archived to `/data/logs/` (last 20) at every container start.
@@ -80,7 +92,7 @@ Changes are applied to the running server when you save. Max players, game type 
   (or permanent). Banned players are kicked when they join; bans are kept in `/data/bans.json`.
 - **Audit log** (admin page → *Audit log*): logins, failed logins, settings, player list, bans, kicks, console
   commands, restarts and restores, with time and address. Kept in `/data/audit.log` (rotated at 1 MB).
-- **Backup** (admin page → *Backup*): one JSON file with settings, player list, bans and statistics (not the rcon
+- **Backup** (admin page → *Backup*): one JSON file with settings, presets, player list, bans, statistics and match history (not the rcon
   password). Restoring validates the file first and keeps the previous state in `/data/backups/`.
 - **Healthcheck:** the image reports *healthy* when nginx, the admin interface and the game server all answer
   (`docker ps` / `docker inspect`).
