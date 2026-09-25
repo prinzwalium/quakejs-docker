@@ -11,6 +11,9 @@ const { execFile } = require('child_process');
 const { FIELDS, GAMETYPES, MAP_RE, validate, ValidationError, Store } = require('./lib/config');
 const { Rcon, RconError } = require('./lib/rcon');
 const pk3 = require('./lib/pk3');
+const { tgaToPng } = require('./lib/tga');
+const { Roster, RosterError, cleanName } = require('./lib/players');
+const { Stats } = require('./lib/stats');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.ADMIN_PORT) || 8081;
@@ -47,8 +50,53 @@ delete process.env.ADMIN_PASSWORD;
 const store = new Store({ dataDir: DATA_DIR, gameDirs: [GAME_DIR, path.join(BASE_DIR, 'cpma')] });
 let settings = store.load();
 const rcon = new Rcon({ url: GAME_URL, password: store.rconPassword() });
+const roster = new Roster(DATA_DIR);
 
-let mapCache = { key: null, maps: [], bots: [] };
+// "Roster names only": kick humans whose name is not on the roster. The log line may be
+// older than the current game state, so the name is checked against the live client list first.
+const recentKicks = new Map();
+async function enforceRoster({ num, name, bot }) {
+  if (bot || settings.nameMode !== 1 || roster.resolve(name)) return;
+  const key = `${num}:${name.toLowerCase()}`;
+  if (recentKicks.has(key) && recentKicks.get(key) > Date.now() - 10000) return;
+  recentKicks.set(key, Date.now());
+  if (recentKicks.size > 1000) recentKicks.clear();
+  try {
+    const { clients } = await rcon.clients();
+    const c = clients.find(x => x.num === num);
+    if (!c || c.bot || cleanName(c.name).toLowerCase() !== name.toLowerCase()) return;
+    log(`kicking "${name}" (client ${num}): not on the player roster`);
+    await rcon.command(`clientkick ${num}`);
+  } catch (e) {
+    log(`could not enforce roster for "${name}": ${e.message}`);
+  }
+}
+
+// Checks everyone who is connected right now (after enabling the mode or editing the roster).
+async function enforceRosterAll() {
+  if (settings.nameMode !== 1) return;
+  try {
+    const { clients } = await rcon.clients();
+    for (const c of clients) if (!c.bot) await enforceRoster({ num: c.num, name: cleanName(c.name), bot: false });
+  } catch (e) {
+    log(`could not check connected players: ${e.message}`);
+  }
+}
+
+const stats = new Stats({
+  dataDir: DATA_DIR,
+  logFile: path.join(GAME_DIR, 'games.log'),
+  onUserinfo: (u) => { enforceRoster(u); },
+});
+setInterval(() => {
+  try {
+    stats.ingest(true);
+  } catch (e) {
+    console.error('[stats]', e.message);
+  }
+}, 2000).unref();
+
+let mapCache = { key: null, maps: [], bots: [], models: [], icons: {} };
 function available() {
   let key = '';
   try {
@@ -162,7 +210,89 @@ const STATIC = {
   '/admin/': ['index.html', 'text/html; charset=utf-8'],
   '/admin/admin.js': ['admin.js', 'application/javascript; charset=utf-8'],
   '/admin/admin.css': ['admin.css', 'text/css; charset=utf-8'],
+  '/stats/': ['stats.html', 'text/html; charset=utf-8'],
+  '/stats/stats.js': ['stats.js', 'application/javascript; charset=utf-8'],
+  '/stats/stats.css': ['admin.css', 'text/css; charset=utf-8'],
 };
+
+// ---------------------------------------------------------------- public endpoints (no login)
+
+// Simple per-IP token bucket for the public endpoints.
+const buckets = new Map();
+function rateLimit(req, cost = 1) {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const RATE = 2; // tokens per second
+  const BURST = 120;
+  let b = buckets.get(ip);
+  if (!b) {
+    if (buckets.size > 10000) buckets.clear();
+    b = { tokens: BURST, at: now };
+    buckets.set(ip, b);
+  }
+  b.tokens = Math.min(BURST, b.tokens + ((now - b.at) / 1000) * RATE);
+  b.at = now;
+  if (b.tokens < cost) throw new HttpError(429, 'Too many requests');
+  b.tokens -= cost;
+}
+
+const iconCache = new Map();
+function iconPng(key) {
+  if (iconCache.has(key)) return iconCache.get(key);
+  const icon = available().icons[key];
+  if (!icon) return null;
+  const png = tgaToPng(pk3.readIcon(icon));
+  iconCache.set(key, png);
+  return png;
+}
+
+function statsReport(bots) {
+  const rows = stats.report({ roster, bots });
+  // Nothing identifying beyond the in-game name is exposed.
+  return rows.map(r => ({
+    name: r.name, bot: r.bot, roster: r.roster, aliases: r.aliases, model: r.model,
+    kills: r.kills, deaths: r.deaths, kd: r.kd, suicides: r.suicides, teamKills: r.teamKills,
+    killsVsHumans: r.killsVsHumans, killsVsBots: r.killsVsBots,
+    matches: r.matches, wins: r.wins, bestScore: r.bestScore,
+    favoriteWeapon: r.favoriteWeapon, weapons: r.weapons,
+    firstSeen: r.firstSeen, lastSeen: r.lastSeen,
+  }));
+}
+
+async function handlePublic(req, res, route, query) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
+
+  if (route === '/admin/api/public/lobby') {
+    rateLimit(req);
+    const { models } = available();
+    const list = models.length ? models : ['sarge'];
+    return send(res, 200, {
+      models: list.map(m => ({ id: m, icon: `/admin/api/public/icon/${m.includes('/') ? m : `${m}/default`}.png` })),
+      roster: roster.players.map(p => ({ name: p.name, model: p.model })),
+      rosterOnly: settings.nameMode === 1,
+      statsPublic: !!settings.statsPublic,
+    });
+  }
+
+  const im = /^\/admin\/api\/public\/icon\/([a-z0-9_-]{1,32})\/([a-z0-9_-]{1,32})\.png$/.exec(route);
+  if (im) {
+    rateLimit(req, 0.25);
+    const png = iconPng(`${im[1]}/${im[2]}`);
+    if (!png) throw new HttpError(404, 'Not found');
+    return send(res, 200, png, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+  }
+
+  if (route === '/admin/api/public/stats') {
+    rateLimit(req);
+    if (!settings.statsPublic && !(!disabledReason && getSession(req))) throw new HttpError(404, 'Statistics are private');
+    return send(res, 200, {
+      players: statsReport(query.get('bots') === '1'),
+      resetAt: stats.state.resetAt,
+    });
+  }
+
+  throw new HttpError(404, 'Not found');
+}
 
 // ---------------------------------------------------------------- game server control
 
@@ -230,7 +360,9 @@ async function runAction(body) {
 
 // ---------------------------------------------------------------- routes
 
-async function handleApi(req, res, route) {
+async function handleApi(req, res, route, query) {
+  if (route.startsWith('/admin/api/public/')) return handlePublic(req, res, route, query);
+
   if (route === '/admin/api/session' && req.method === 'GET') {
     return send(res, 200, { enabled: !disabledReason, reason: disabledReason, authenticated: !!getSession(req) });
   }
@@ -311,6 +443,7 @@ async function handleApi(req, res, route) {
     store.save(next);
     settings = next;
     log(`settings saved by ${ip}`);
+    enforceRosterAll();
     let applied = true;
     let applyError = null;
     try {
@@ -339,6 +472,24 @@ async function handleApi(req, res, route) {
     return send(res, 200, { ok: true, output: out });
   }
 
+  if (route === '/admin/api/players' && req.method === 'GET') {
+    return send(res, 200, { players: roster.players, recent: stats.recentNames(roster), models: available().models });
+  }
+
+  if (route === '/admin/api/players' && req.method === 'PUT') {
+    const body = await readJson(req);
+    const players = roster.save(body.players, available().models);
+    log(`player roster saved by ${ip} (${players.length} players)`);
+    enforceRosterAll();
+    return send(res, 200, { ok: true, players, recent: stats.recentNames(roster) });
+  }
+
+  if (route === '/admin/api/stats/reset' && req.method === 'POST') {
+    stats.reset(path.join(DATA_DIR, 'stats-archive'));
+    log(`statistics reset by ${ip}`);
+    return send(res, 200, { ok: true });
+  }
+
   if (route === '/admin/api/console' && req.method === 'POST') {
     const body = await readJson(req);
     const cmd = typeof body.command === 'string' ? body.command.replace(/[\r\n]/g, ' ').trim().slice(0, 256) : '';
@@ -356,20 +507,23 @@ async function handleApi(req, res, route) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    const route = decodeURI(req.url.split('?')[0]);
+    const [rawPath, rawQuery] = req.url.split('?');
+    const route = decodeURI(rawPath);
+    const query = new URLSearchParams(rawQuery || '');
     if (route === '/admin') return send(res, 301, '', { Location: '/admin/', 'Content-Type': 'text/plain' });
+    if (route === '/stats') return send(res, 301, '', { Location: '/stats/', 'Content-Type': 'text/plain' });
     if (STATIC[route]) {
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       const [file, type] = STATIC[route];
       return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, file)), { 'Content-Type': type });
     }
-    if (route.startsWith('/admin/api/')) return await handleApi(req, res, route);
+    if (route.startsWith('/admin/api/')) return await handleApi(req, res, route, query);
     throw new HttpError(404, 'Not found');
   } catch (e) {
     let status = 500;
     let message = 'Internal error';
     if (e instanceof HttpError) [status, message] = [e.status, e.message];
-    else if (e instanceof ValidationError) [status, message] = [400, e.message];
+    else if (e instanceof ValidationError || e instanceof RosterError) [status, message] = [400, e.message];
     else if (e instanceof RconError) [status, message] = [502, e.message];
     else if (e instanceof URIError) [status, message] = [400, 'Bad request'];
     else console.error('[admin]', e);
@@ -382,4 +536,10 @@ server.headersTimeout = 10000;
 server.requestTimeout = 90000;
 server.listen(PORT, HOST, () => log(`listening on ${HOST}:${PORT}${disabledReason ? ' (disabled: ADMIN_PASSWORD not set or too short)' : ''}`));
 
-process.on('SIGTERM', () => server.close(() => process.exit(0)));
+function shutdown() {
+  try { stats.save(); } catch (e) { console.error('[stats]', e.message); }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

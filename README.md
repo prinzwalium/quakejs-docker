@@ -59,6 +59,21 @@ Security:
 
 Changes are applied to the running server when you save. Max players, game type and "bots allowed" take effect when the next map loads.
 
+#### Players and statistics
+
+- **Lobby:** before the game starts, players choose a name (Quake color codes like `^1` work) and a player model.
+  The choice is saved in a cookie, so the next visit goes straight into the game. Open `/#lobby` or click
+  *Change player* (top right, shown for a few seconds) to change it.
+- **Player list** (admin page → *Players*): known players with the other names they play under and a default model.
+  The lobby suggests these names. Set *Player names* to *Only players on this list* to kick everyone else
+  (bots are never kicked). *Recently seen names* lists names that are not on the list yet.
+- **Statistics** (admin page → *Statistics*, and `/stats/`): kills, deaths, K/D, matches, wins, best score,
+  favourite weapon and more per player, collected from the game log. All names of a player on the list are
+  combined. Bots are hidden unless *Show bots* is ticked; kills against bots still count.
+  The stats page is private until you tick *Stats page is public*.
+  Statistics are kept in `/data/stats.json`; *Reset statistics* archives them to `/data/stats-archive/` first.
+  The game log is archived to `/data/logs/` (last 20) at every container start.
+
 #### docker-compose.yml
 
 ```
@@ -97,7 +112,7 @@ Only the official `node` base image and the Debian packages `nginx` and `supervi
 | `include/ioq3ded/` | QuakeJS dedicated server, with the interactive EULA prompt removed |
 | `include/quakejs/html/` | QuakeJS web client from [begleysm/quakejs](https://github.com/begleysm/quakejs), pre-patched for reverse proxies, see [UPSTREAM.md](include/quakejs/UPSTREAM.md) |
 | `include/quakejs/node_modules/` | `ws`, the only runtime dependency of the dedicated server |
-| `admin/` | Admin interface (Node.js, no dependencies) and the generator for the game server config |
+| `admin/` | Admin interface, stats page and lobby API (Node.js, no dependencies) and the generator for the game server config |
 
 The dedicated server is started with `+set fs_cdn 127.0.0.1:80`, so it loads its content from the
 container's own nginx instead of content.quakejs.com.

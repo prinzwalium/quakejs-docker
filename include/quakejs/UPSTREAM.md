@@ -19,6 +19,12 @@ load everything from the host serving the page, so it works behind an HTTPS reve
   - The game websocket connects to `window.location.protocol.replace('http', 'ws') + window.location.host`
     (ws on http, wss on https), which nginx proxies to the game server on port 27960.
 
+- `html/index.html` also loads `lobby.js` / `lobby.css` (added in this repository, not upstream): before
+  the game starts, a lobby asks for the player name and model, keeps them in a cookie and passes them as
+  `+set name ... +set model ...`. Commands from the URL query string are appended after them.
+- `html/disconnected.html` (added in this repository) is shown by nginx when the client reports an error
+  after leaving the game (it POSTs to `/`), instead of nginx's "405 Not Allowed" page.
+
 ## node_modules
 
 `package.json` / `package-lock.json` / `node_modules/` contain the only runtime dependency of the

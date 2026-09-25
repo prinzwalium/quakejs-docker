@@ -3,7 +3,9 @@
 	<head>
 		<title>QuakeJS Local</title>
 		<link rel="stylesheet" href="game.css"></link>
+		<link rel="stylesheet" href="lobby.css">
 		<script type="text/javascript" src="ioquake3.js"></script>
+		<script type="text/javascript" src="lobby.js"></script>
 		<link rel="apple-touch-icon" sizes="57x57" href="/apple-icon-57x57.png">
 		<link rel="apple-touch-icon" sizes="60x60" href="/apple-icon-60x60.png">
 		<link rel="apple-touch-icon" sizes="72x72" href="/apple-icon-72x72.png">
@@ -92,8 +94,13 @@
 				//var args = ['+set', 'fs_cdn', 'content.quakejs.com:80', '+set', 'sv_master1', 'master.quakejs.com:27950']; //original args to list the servers from master.quakejs.com
 				//var args = ['+set', 'fs_cdn', 'content.quakejs.com:80', '+set', 'sv_master1', 'master.quakejs.com:27950', '+connect', 'YOUR_SERVER_HERE:27960']; //additional +connect arguement to connect to a specific server
 				var args = ['+set', 'fs_cdn', window.location.hostname, '+connect', window.location.hostname]; //custom args list targeting a local content server and local game server both at the address 'quakejs'
-				args.push.apply(args, getQueryCommands());
-				ioq3.callMain(args);
+				// Player name and model from the lobby (lobby.js); query string commands still win.
+				var start = function (lobbyArgs) {
+					args.push.apply(args, lobbyArgs || []);
+					args.push.apply(args, getQueryCommands());
+					ioq3.callMain(args);
+				};
+				if (window.qjsLobby) window.qjsLobby.start(start); else start([]);
 			};
 		</script>
 	</head>

@@ -61,15 +61,19 @@ function extract(fd, entry) {
   throw new Error('unsupported compression method ' + entry.method);
 }
 
-// Returns { maps: [...], bots: [...] } for all *.pk3 files in dir.
+// Returns { maps, bots, models, icons } for all *.pk3 files in dir.
+// models: selectable player models as "model" or "model/skin" (team skins red/blue excluded).
+// icons: { "model/skin": { file, entry } } used by readIcon().
 function scan(dir) {
   const maps = new Set();
   const bots = new Set();
+  const bodies = new Set();
+  const icons = {};
   let files = [];
   try {
     files = fs.readdirSync(dir).filter(f => /\.pk3$/i.test(f)).sort();
   } catch (e) {
-    return { maps: [], bots: [] };
+    return { maps: [], bots: [], models: [], icons: {} };
   }
   for (const f of files) {
     let fd;
@@ -85,6 +89,10 @@ function scan(dir) {
       const lower = e.name.toLowerCase();
       const m = /^maps\/([a-z0-9_-]+)\.bsp$/.exec(lower);
       if (m) maps.add(m[1]);
+      const body = /^models\/players\/([a-z0-9_-]+)\/lower\.(md3|mdc)$/.exec(lower);
+      if (body) bodies.add(body[1]);
+      const icon = /^models\/players\/([a-z0-9_-]+)\/icon_([a-z0-9_-]+)\.tga$/.exec(lower);
+      if (icon && icon[2] !== 'red' && icon[2] !== 'blue') icons[`${icon[1]}/${icon[2]}`] = { file: path.join(dir, f), entry: e };
       if (lower === 'scripts/bots.txt' || /^scripts\/[^/]+\.bot$/.test(lower)) {
         try {
           const text = extract(fd, e).toString('latin1');
@@ -94,8 +102,21 @@ function scan(dir) {
     }
     fs.closeSync(fd);
   }
+  // Only models with a body can be played; drop icons of head-only models.
+  for (const key of Object.keys(icons)) if (!bodies.has(key.split('/')[0])) delete icons[key];
   const byName = (a, b) => a.localeCompare(b, 'en', { numeric: true });
-  return { maps: [...maps].sort(byName), bots: [...bots].sort(byName) };
+  const models = Object.keys(icons).map(k => (k.endsWith('/default') ? k.slice(0, -8) : k)).sort(byName);
+  return { maps: [...maps].sort(byName), bots: [...bots].sort(byName), models, icons };
 }
 
-module.exports = { scan };
+// Reads one icon (TGA) found by scan().
+function readIcon(icon) {
+  const fd = fs.openSync(icon.file, 'r');
+  try {
+    return extract(fd, icon.entry);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+module.exports = { scan, readIcon };

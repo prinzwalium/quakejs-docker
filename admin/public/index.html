@@ -6,6 +6,7 @@
   <meta name="robots" content="noindex">
   <title>QuakeJS Admin</title>
   <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/stats/stats.js" defer></script>
   <script src="/admin/admin.js" defer></script>
 </head>
 <body>
@@ -160,6 +161,47 @@
           </label>
         </fieldset>
       </form>
+
+      <section class="card" id="players-card">
+        <div class="card-head">
+          <h2>Players</h2>
+          <button type="button" id="roster-save">Save players</button>
+        </div>
+        <p class="muted">Known players and the names they play under. Statistics of all names of a player are combined.
+          The lobby suggests these names and uses the model as default.</p>
+        <label>Player names
+          <select id="name-mode">
+            <option value="0">Anyone can join with any name</option>
+            <option value="1">Only players on this list (others are kicked)</option>
+          </select>
+        </label>
+        <div class="table-wrap">
+          <table class="players roster">
+            <thead><tr><th>Name</th><th>Other names (comma separated)</th><th>Default model</th><th></th></tr></thead>
+            <tbody id="roster"></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button type="button" id="roster-add" class="secondary">Add player</button>
+        </div>
+        <h3>Recently seen names not on the list</h3>
+        <ul id="recent-names" class="recent"></ul>
+      </section>
+
+      <section class="card" id="stats-card">
+        <div class="card-head">
+          <h2>Statistics</h2>
+          <a class="button secondary" href="/stats/" target="_blank" rel="noopener">Open stats page</a>
+        </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="stats-public"> Stats page is public (anyone who can open the game can see <code>/stats/</code>)</label>
+        </div>
+        <div id="admin-stats"></div>
+        <div class="restart-row">
+          <button type="button" id="stats-reset" class="danger">Reset statistics</button>
+          <span class="muted">The current statistics are archived in /data/stats-archive before they are cleared.</span>
+        </div>
+      </section>
 
       <section class="card">
         <h2>Console</h2>
