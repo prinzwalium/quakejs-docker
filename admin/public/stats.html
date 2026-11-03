@@ -3,20 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Player Statistics</title>
+  <meta name="theme-color" content="#0e0d0b">
+  <title>Player statistics · QuakeJS</title>
+  <link rel="stylesheet" href="/theme/theme.css">
+  <link rel="stylesheet" href="/theme/components.css">
   <link rel="stylesheet" href="/stats/stats.css">
   <script src="/stats/stats.js" defer></script>
 </head>
-<body>
-  <header>
-    <h1>Player statistics</h1>
-    <a class="button secondary" href="/">Play</a>
+<body class="ds">
+  <header class="topbar">
+    <span class="rail__brandname">QuakeJS</span>
+    <a class="btn btn--loud" href="/">Play</a>
   </header>
-  <main>
-    <p id="now-playing" class="now-playing" hidden></p>
-    <section class="card">
-      <div id="stats-page"><p class="muted">Loading…</p></div>
-      <p id="stats-private" class="muted" hidden>The statistics of this server are private.</p>
+  <main class="main main--page">
+    <p id="now-playing" class="notice now-playing" hidden></p>
+    <section class="plate">
+      <header class="plate__head">
+        <span class="plate__icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z"/><path d="M4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5"/></svg></span>
+        <h1 class="plate__title">Player statistics</h1>
+      </header>
+      <div class="plate__section">
+        <div id="stats-page"><p class="muted">Loading…</p></div>
+        <p id="stats-private" class="muted" hidden>The statistics of this server are private. Only its admin can make them public.</p>
+      </div>
     </section>
   </main>
 </body>

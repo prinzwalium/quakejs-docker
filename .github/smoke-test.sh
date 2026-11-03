@@ -34,6 +34,17 @@ done
 curl -fsS -o /dev/null "$BASE/"
 curl -fsS -o /dev/null "$BASE/assets/manifest.json"
 
+echo "theme (design system tokens, components and vendored fonts):"
+curl -fsS -o /dev/null -w '%{content_type}\n' "$BASE/theme/theme.css" | grep -q text/css
+curl -fsS "$BASE/theme/theme.css" | grep -q -- '--accent-fg'
+curl -fsS -o /dev/null -w '%{content_type}\n' "$BASE/theme/components.css" | grep -q text/css
+curl -fsS -o /dev/null -w '%{content_type}\n' "$BASE/theme/fonts/alegreya-sc-latin-700-normal.woff2" | grep -q font/woff2
+curl -fsS "$BASE/" | grep -q '/theme/theme.css'
+
+echo "admin page (rail layout, fonts allowed by the CSP):"
+curl -fsS "$BASE/admin/" | grep -q 'class="rail"'
+curl -fsSI "$BASE/admin/" | grep -qi "font-src 'self'"
+
 echo "admin login:"
 curl -fsS -c "$JAR" -H 'X-Requested-With: qjs-admin' -H 'Content-Type: application/json' \
   -d "{\"password\":\"$PASSWORD\"}" "$BASE/admin/api/login"

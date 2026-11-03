@@ -1,0 +1,137 @@
+/*
+ * QuakeJS theme: the colours, type, spacing and shadows of the 5etools-online design system
+ * (tokens.json, synced 2026-11-02). Tokens only; components.css holds the components.
+ * Dark is the default, the parchment re-tint follows the device's light setting.
+ * Fonts: Alegreya Sans and Alegreya SC, SIL Open Font License 1.1 (see fonts/LICENSE-*.txt).
+ */
+
+@font-face {
+	font-family: "Alegreya Sans";
+	src: url("/theme/fonts/alegreya-sans-latin-400-normal.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Alegreya Sans";
+	src: url("/theme/fonts/alegreya-sans-latin-400-italic.woff2") format("woff2");
+	font-weight: 400;
+	font-style: italic;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Alegreya Sans";
+	src: url("/theme/fonts/alegreya-sans-latin-500-normal.woff2") format("woff2");
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Alegreya Sans";
+	src: url("/theme/fonts/alegreya-sans-latin-700-normal.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Alegreya SC";
+	src: url("/theme/fonts/alegreya-sc-latin-500-normal.woff2") format("woff2");
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Alegreya SC";
+	src: url("/theme/fonts/alegreya-sc-latin-700-normal.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	color-scheme: dark;
+	--bg: #0e0d0b;
+	--panel: #1a1814;
+	--panel-2: #221f1a;
+	--line: #2f2b23;
+	--line-soft: #25221c;
+	--fg: #ece5d5;
+	--fg-dim: #a89f8c;
+	--fg-faint: #8f8775;
+	--accent: #d8b65a;
+	--accent-soft: #3a3018;
+	--accent-fg: #e3c46b;
+	--danger: #d9675b;
+	--danger-fg: #e08070;
+	--warn: #e58a3c;
+	--hp: #6fbf73;
+	--frame: #5a3e1f;
+	--frame-edge: #b48c46;
+	--frame-fg: #e3c46b;
+	--pill-cond-line: #6b3530;
+	--pill-cond-fg: #e08070;
+	--pill-effect-line: #34506f;
+	--pill-effect-fg: #8db3e2;
+	--pill-conc-line: #4d3c66;
+	--pill-conc-fg: #c2a6e8;
+	--pill-good-line: #3c6b45;
+	--pill-good-fg: #7cc48a;
+	--scene-combat: #e08070;
+	--scene-social: #8db3e2;
+	--scene-exploration: #7cc48a;
+	--scene-puzzle: #c2a6e8;
+	--scene-reveal: #e58a3c;
+	--scene-rest: #a89f8c;
+	--sticky-bg: #3b3320;
+	--sticky-line: #5a4c2a;
+	--sticky-fg: #e8dcc0;
+	--shadow: 0 1px 2px rgb(0 0 0 / 40%);
+	--shadow-modal: 0 12px 40px rgb(0 0 0 / 45%);
+	--gap: 12px;
+	--radius: 8px;
+	--radius-sm: 5px;
+	--radius-frame: 4px;
+	--radius-pill: 999px;
+	--font-name: "Alegreya SC", Georgia, "Times New Roman", serif;
+	--font-body: "Alegreya Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		color-scheme: light;
+		--bg: #f3ede0;
+		--panel: #fbf7ee;
+		--panel-2: #efe7d6;
+		--line: #d9cdb4;
+		--line-soft: #e6dcc7;
+		--fg: #2a2318;
+		--fg-dim: #5a4f3d;
+		--fg-faint: #6e6350;
+		--accent: #8a6a1f;
+		--accent-soft: #eadbb0;
+		--accent-fg: #6b4f12;
+		--danger: #a8402f;
+		--danger-fg: #8e3324;
+		--warn: #9a5210;
+		--hp: #2a6e34;
+		--pill-cond-line: #d9a99f;
+		--pill-cond-fg: #8e3324;
+		--pill-effect-line: #a9bfd9;
+		--pill-effect-fg: #2f5a8a;
+		--pill-conc-line: #c3b2dd;
+		--pill-conc-fg: #6a4a9a;
+		--pill-good-line: #a7c9ad;
+		--pill-good-fg: #2f6b3b;
+		--scene-combat: #8e3324;
+		--scene-social: #2f5a8a;
+		--scene-exploration: #2f6b3b;
+		--scene-puzzle: #6a4a9a;
+		--scene-reveal: #9a5210;
+		--scene-rest: #5a4f3d;
+		--sticky-bg: #f6ebc8;
+		--sticky-line: #d9c690;
+		--sticky-fg: #3a3016;
+		--shadow: 0 1px 2px rgb(60 40 10 / 10%);
+	}
+}

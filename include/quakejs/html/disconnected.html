@@ -3,17 +3,20 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Disconnected</title>
+	<meta name="theme-color" content="#0e0d0b">
+	<title>Disconnected · QuakeJS</title>
+	<link rel="stylesheet" href="/theme/theme.css">
+	<link rel="stylesheet" href="/theme/components.css">
 	<link rel="stylesheet" href="/lobby.css">
 </head>
-<body>
-	<div class="qjs-lobby">
+<body class="ds">
+	<div class="qjs-lobby qjs-lobby--page">
 		<div class="qjs-lobby-box">
 			<h1>You were disconnected</h1>
 			<p>The connection to the game server ended. You may have been kicked, the server may have restarted,
 				or the server only allows players from its player list.</p>
-			<p><a class="qjs-lobby-play qjs-lobby-link" href="/">Rejoin</a></p>
-			<p><a class="qjs-lobby-stats" href="/#lobby">Change player</a></p>
+			<p><a class="qjs-lobby-play qjs-lobby-link btn btn--loud" href="/">Rejoin</a></p>
+			<p><a class="qjs-lobby-link btn btn--quiet" href="/#lobby">Change player</a></p>
 		</div>
 	</div>
 </body>

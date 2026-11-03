@@ -158,13 +158,19 @@
 
 	// "Now playing" panel: server name, map, mode and who is online.
 	function onlinePanel() {
-		var box = el('div', 'qjs-lobby-online');
+		var box = el('div', 'qjs-lobby-online notice');
 		box.setAttribute('aria-live', 'polite');
 		var title = el('div', 'qjs-lobby-online-title', 'Checking the server\u2026');
 		var who = el('div', 'qjs-lobby-online-who');
 		box.appendChild(title);
 		box.appendChild(who);
 		var timer = null;
+		// Gold edge while the server answers, the warning edge when it does not.
+		function offline() {
+			box.className = 'qjs-lobby-online notice notice--warn';
+			title.textContent = 'The game server is not reachable right now.';
+			who.textContent = 'You can still choose your player; the game connects once the server is back.';
+		}
 		function load() {
 			var xhr = new XMLHttpRequest();
 			xhr.open('GET', '/admin/api/public/server');
@@ -173,10 +179,10 @@
 				var d = null;
 				try { d = xhr.status === 200 ? JSON.parse(xhr.responseText) : null; } catch (e) { d = null; }
 				if (!d || !d.online) {
-					title.textContent = 'The game server is not reachable right now.';
-					who.textContent = '';
+					offline();
 					return;
 				}
+				box.className = 'qjs-lobby-online notice';
 				title.textContent = (d.hostname ? d.hostname + ' \u2013 ' : '') + d.map + ' (' + d.gametypeName + ')';
 				var names = d.humans.map(function (h) { return h.name; });
 				var bots = d.bots ? d.bots + ' bot' + (d.bots === 1 ? '' : 's') : '';
@@ -184,7 +190,7 @@
 					: (bots ? 'No players yet, ' + bots + ' in the game.' : 'Nobody is playing right now.');
 				who.textContent = text;
 			};
-			xhr.onerror = xhr.ontimeout = function () { title.textContent = 'The game server is not reachable right now.'; };
+			xhr.onerror = xhr.ontimeout = offline;
 			xhr.send();
 		}
 		load();
@@ -215,7 +221,7 @@
 	}
 
 	function showChangeLink() {
-		var a = el('a', 'qjs-lobby-change', 'Change player');
+		var a = el('a', 'qjs-lobby-change btn btn--quiet btn--slim', 'Change player');
 		a.href = '/#lobby';
 		a.addEventListener('click', function (ev) {
 			ev.preventDefault();
@@ -238,7 +244,7 @@
 		var box = el('form', 'qjs-lobby-box');
 		var online = onlinePanel();
 		box.appendChild(online);
-		box.appendChild(el('h1', null, 'Choose your player'));
+		box.appendChild(el('h1', 'qjs-lobby-title', 'Choose your player'));
 
 		var label = el('label', null, 'Name');
 		var nameInput;
@@ -307,7 +313,7 @@
 				img.height = 64;
 				b.appendChild(img);
 			}
-			b.appendChild(el('span', null, m.id.replace('/', ' / ')));
+			b.appendChild(el('span', 'qjs-lobby-model-name', m.id.replace('/', ' / ')));
 			b.addEventListener('click', function () { selectModel(m.id); });
 			buttons[m.id] = b;
 			grid.appendChild(b);
@@ -319,7 +325,7 @@
 		var error = el('p', 'qjs-lobby-error');
 		error.hidden = true;
 		box.appendChild(error);
-		var play = el('button', 'qjs-lobby-play', 'Play');
+		var play = el('button', 'qjs-lobby-play btn btn--loud', 'Play');
 		play.type = 'submit';
 		box.appendChild(play);
 		if (data && data.statsPublic) {
@@ -334,7 +340,7 @@
 			ev.preventDefault();
 			var name = cleanName(nameInput.value);
 			if (!stripColors(name).trim()) {
-				error.textContent = 'Please enter a name.';
+				error.textContent = 'Enter a name to play.';
 				error.hidden = false;
 				nameInput.focus();
 				return;
