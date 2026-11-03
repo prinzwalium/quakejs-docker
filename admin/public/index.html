@@ -4,276 +4,395 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0e0d0b">
   <title>QuakeJS Admin</title>
+  <link rel="stylesheet" href="/theme/theme.css">
+  <link rel="stylesheet" href="/theme/components.css">
   <link rel="stylesheet" href="/admin/admin.css">
   <script src="/stats/stats.js" defer></script>
   <script src="/admin/admin.js" defer></script>
 </head>
-<body>
-  <header>
-    <h1>QuakeJS Admin</h1>
-    <button id="logout" class="secondary" hidden>Log out</button>
-  </header>
+<body class="ds">
+  <!-- Line icons of the design system (24 viewBox, stroke currentColor) -->
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-dice" viewBox="0 0 24 24"><path d="M12 2.5l8.5 5v9L12 21.5l-8.5-5v-9z"/><path d="M12 2.5v19M3.5 7.5l17 9M20.5 7.5l-17 9"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-tonight" viewBox="0 0 24 24"><path d="M12 3v2M5.6 5.6l1.4 1.4M3 12h2M19 12h2M17 7l1.4-1.4"/><path d="M7 16a5 5 0 0 1 10 0"/><path d="M3 19h18"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="M8 15a4 4 0 1 0 0-8a4 4 0 1 0 0 8"/><path d="M11 11h10M18 11v3M21 11v3"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M4 19V5M9 19V5M14 19l-1-14M15 5l5 14"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><path d="M12 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></symbol>
+    <symbol id="i-coins" viewBox="0 0 24 24"><path d="M12 4c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z"/><path d="M4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><path d="M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-signOut" viewBox="0 0 24 24"><path d="M14 4h5v16h-5"/><path d="M10 8l-4 4 4 4M6 12h10"/></symbol>
+  </svg>
 
-  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <main>
-    <section id="disabled" class="card" hidden>
-      <h2>Admin interface disabled</h2>
-      <p id="disabled-reason"></p>
-    </section>
+  <div class="shell">
+    <nav class="rail" id="rail" aria-label="Admin sections">
+      <div class="rail__brand">
+        <span class="rail__mark"><svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg></span>
+        <span><span class="rail__brandname">QuakeJS</span><span class="rail__brandsub">Server admin</span></span>
+      </div>
+      <div class="rail__items" id="rail-items" hidden>
+        <a class="rail__item" href="#server"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg>Server</a>
+        <a class="rail__item" href="#settings"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>Settings</a>
+        <a class="rail__item" href="#presets"><svg class="icon" aria-hidden="true"><use href="#i-files"/></svg>Presets</a>
+        <a class="rail__item" href="#players"><svg class="icon" aria-hidden="true"><use href="#i-person"/></svg>Players</a>
+        <a class="rail__item" href="#statistics"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg>Statistics</a>
+        <a class="rail__item" href="#bans"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>Bans</a>
+        <a class="rail__item" href="#backup"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg>Backup</a>
+        <a class="rail__item" href="#audit"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Audit log</a>
+        <a class="rail__item" href="#console"><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg>Console</a>
+        <button type="button" class="rail__item rail__logout" id="logout"><svg class="icon" aria-hidden="true"><use href="#i-signOut"/></svg>Log out</button>
+      </div>
+    </nav>
 
-    <section id="login" class="card narrow" hidden>
-      <h2>Log in</h2>
-      <form id="login-form">
-        <label>Admin password
-          <input type="password" id="login-password" autocomplete="current-password" required autofocus>
-        </label>
-        <button type="submit">Log in</button>
-        <p id="login-error" class="error" hidden></p>
-      </form>
-    </section>
-
-    <div id="app" hidden>
-      <section class="card">
-        <div class="card-head">
-          <h2>Server status</h2>
-          <span id="status-badge" class="badge">…</span>
-        </div>
-        <dl class="facts">
-          <div><dt>Map</dt><dd id="st-map">–</dd></div>
-          <div><dt>Game type</dt><dd id="st-gametype">–</dd></div>
-          <div><dt>Players</dt><dd id="st-players">–</dd></div>
-        </dl>
-        <div id="restart-banner" class="banner" hidden>
-          <span>Some saved settings take effect when the next map loads: <strong id="restart-fields"></strong>. Change the map to apply them now.</span>
-        </div>
-        <table class="players">
-          <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Ping</th><th></th></tr></thead>
-          <tbody id="players"><tr><td colspan="5" class="muted">No players</td></tr></tbody>
-        </table>
+    <main class="main">
+      <section id="disabled" class="plate narrow" hidden>
+        <header class="plate__head"><span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span><h1 class="plate__title">The admin interface is off</h1></header>
+        <div class="plate__section"><p id="disabled-reason"></p></div>
       </section>
 
-      <section class="card">
-        <h2>Live control</h2>
-        <div class="grid">
-          <div class="control">
-            <label>Change map
-              <select id="act-map"></select>
-            </label>
-            <button data-action="map">Change now</button>
-          </div>
-          <div class="control">
-            <span class="label">Match</span>
-            <div class="row">
-              <button data-action="restartMatch" class="secondary">Restart match</button>
-              <button data-action="nextMap" class="secondary">Next map in rotation</button>
+      <section id="login" class="plate narrow" hidden>
+        <header class="plate__head"><span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg></span><h1 class="plate__title">Log in</h1></header>
+        <form id="login-form" class="plate__section stack">
+          <label class="fld"><span class="fld__label">Admin password</span>
+            <input type="password" id="login-password" autocomplete="current-password" required autofocus>
+          </label>
+          <p id="login-error" class="error" hidden></p>
+          <div><button type="submit" class="btn btn--loud">Log in</button></div>
+        </form>
+      </section>
+
+      <div id="app" hidden>
+        <!-- ======================== Server ======================== -->
+        <div class="page" id="page-server" data-page="server">
+          <section class="plate">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg></span>
+              <h1 class="plate__title">Server</h1>
+              <div class="plate__actions"><span id="status-badge" class="pill">…</span></div>
+            </header>
+            <div class="plate__section">
+              <div class="vitals">
+                <div class="vital"><span class="vital__label">Map</span><span class="vital__value" id="st-map">–</span></div>
+                <div class="vital"><span class="vital__label">Game type</span><span class="vital__value" id="st-gametype">–</span></div>
+                <div class="vital vital--wide"><span class="vital__label">Players</span><span class="vital__value" id="st-players">–</span></div>
+              </div>
+              <div id="restart-banner" class="notice notice--warn" hidden>
+                Some saved settings take effect when the next map loads: <strong id="restart-fields"></strong>.
+                Change the map to apply them now.
+              </div>
             </div>
-          </div>
-          <div class="control">
-            <label>Add bot
-              <span class="row">
-                <select id="act-bot"></select>
-                <select id="act-bot-skill" aria-label="Bot skill">
-                  <option value="1">1 – I Can Win</option>
-                  <option value="2">2 – Bring It On</option>
-                  <option value="3" selected>3 – Hurt Me Plenty</option>
-                  <option value="4">4 – Hardcore</option>
-                  <option value="5">5 – Nightmare!</option>
+            <div class="plate__section">
+              <h2 class="sublabel">In the game</h2>
+              <div class="table-wrap table-wrap--flat">
+                <table class="table">
+                  <thead><tr><th class="num">#</th><th>Name</th><th class="num">Score</th><th class="num">Ping</th><th></th></tr></thead>
+                  <tbody id="players"><tr><td colspan="5" class="muted">Nobody is playing.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="plate">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-tonight"/></svg></span>
+              <h2 class="plate__title">Live control</h2>
+            </header>
+            <div class="plate__section controls">
+              <div class="control">
+                <label class="fld"><span class="fld__label">Change map</span><select id="act-map"></select></label>
+                <div class="bar"><button type="button" class="btn" data-action="map">Change now</button></div>
+              </div>
+              <div class="control">
+                <span class="fld__label">Match</span>
+                <div class="bar">
+                  <button type="button" class="btn btn--quiet" data-action="restartMatch">Restart match</button>
+                  <button type="button" class="btn btn--quiet" data-action="nextMap">Next map in rotation</button>
+                </div>
+              </div>
+              <div class="control">
+                <label class="fld"><span class="fld__label">Add bot</span>
+                  <span class="bar">
+                    <select id="act-bot" aria-label="Bot"></select>
+                    <select id="act-bot-skill" aria-label="Bot skill">
+                      <option value="1">1 – I Can Win</option>
+                      <option value="2">2 – Bring It On</option>
+                      <option value="3" selected>3 – Hurt Me Plenty</option>
+                      <option value="4">4 – Hardcore</option>
+                      <option value="5">5 – Nightmare!</option>
+                    </select>
+                  </span>
+                </label>
+                <div class="bar">
+                  <button type="button" class="btn" data-action="addBot">Add bot</button>
+                  <button type="button" class="btn btn--quiet" data-action="kickBots">Remove all bots</button>
+                </div>
+              </div>
+              <div class="control">
+                <label class="fld"><span class="fld__label">Message to all players</span><input type="text" id="act-say" maxlength="150"></label>
+                <div class="bar"><button type="button" class="btn" data-action="say">Send</button></div>
+              </div>
+            </div>
+            <div class="plate__section bar">
+              <button type="button" id="restart" class="btn btn--danger">Restart game server</button>
+              <span class="muted">Disconnects all players for a few seconds and starts the rotation from the first map.</span>
+            </div>
+          </section>
+        </div>
+
+        <!-- ======================== Settings ======================== -->
+        <div class="page" id="page-settings" data-page="settings" hidden>
+          <form id="settings-form" class="plate">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg></span>
+              <h1 class="plate__title">Settings</h1>
+              <div class="plate__actions"><button type="submit" class="btn btn--loud">Save &amp; apply</button></div>
+            </header>
+            <div class="plate__section">
+              <p class="muted">Changes apply to the running server when you save. Settings marked
+                <span class="pill pill--effect">Next map</span> apply when the next map loads.</p>
+            </div>
+
+            <fieldset class="plate__section">
+              <legend class="sublabel">Server</legend>
+              <div class="fields">
+                <label class="fld"><span class="fld__label">Server name</span><input name="hostname" type="text" maxlength="64"></label>
+                <label class="fld"><span class="fld__label">Message of the day</span><input name="motd" type="text" maxlength="128"></label>
+                <label class="fld"><span class="fld__label">Join password</span><input name="password" type="text" maxlength="32" placeholder="none" autocomplete="off"></label>
+                <label class="fld"><span class="fld__label">Max players <span class="pill pill--effect">Next map</span></span><input name="maxclients" type="number" min="1" max="32"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="plate__section">
+              <legend class="sublabel">Game rules</legend>
+              <div class="fields">
+                <label class="fld"><span class="fld__label">Game type <span class="pill pill--effect">Next map</span></span><select name="gametype" id="gametype"></select></label>
+                <label class="fld"><span class="fld__label">Frag limit</span><input name="fraglimit" type="number" min="0" max="999"></label>
+                <label class="fld"><span class="fld__label">Time limit</span><input name="timelimit" type="number" min="0" max="999"><span class="hint">Minutes</span></label>
+                <label class="fld"><span class="fld__label">Capture limit</span><input name="capturelimit" type="number" min="0" max="999"><span class="hint">Capture the flag</span></label>
+                <label class="fld"><span class="fld__label">Quad damage factor</span><input name="quadfactor" type="number" min="1" max="10"></label>
+                <label class="fld"><span class="fld__label">Weapon respawn</span><input name="weaponrespawn" type="number" min="1" max="60"><span class="hint">Seconds</span></label>
+                <label class="fld"><span class="fld__label">Force respawn after</span><input name="forcerespawn" type="number" min="0" max="60"><span class="hint">Seconds, 0 = off</span></label>
+                <label class="fld"><span class="fld__label">Kick inactive players after</span><input name="inactivity" type="number" min="0" max="86400"><span class="hint">Seconds, 0 = off</span></label>
+              </div>
+              <div class="checks">
+                <label class="check"><input name="friendlyfire" type="checkbox"> Friendly fire</label>
+                <label class="check"><input name="teamAutoJoin" type="checkbox"> Put new players on a team automatically (team modes)</label>
+              </div>
+            </fieldset>
+
+            <fieldset class="plate__section">
+              <legend class="sublabel">Bots</legend>
+              <div class="fields">
+                <label class="fld"><span class="fld__label">Fill the server with bots up to</span><input name="botMinplayers" type="number" min="0" max="32"><span class="hint">Players, 0 = off</span></label>
+                <label class="fld"><span class="fld__label">Skill of automatic bots</span>
+                  <select name="botSkill">
+                    <option value="1">1 – I Can Win</option>
+                    <option value="2">2 – Bring It On</option>
+                    <option value="3">3 – Hurt Me Plenty</option>
+                    <option value="4">4 – Hardcore</option>
+                    <option value="5">5 – Nightmare!</option>
+                  </select>
+                </label>
+              </div>
+              <div class="checks">
+                <label class="check"><input name="botEnable" type="checkbox"> Bots allowed <span class="pill pill--effect">Next map</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="plate__section">
+              <legend class="sublabel">Map rotation</legend>
+              <ol id="rotation" class="rotation"></ol>
+              <div class="bar">
+                <select id="rotation-add" aria-label="Map to add"></select>
+                <button type="button" id="rotation-add-btn" class="btn">＋ Add to rotation</button>
+              </div>
+            </fieldset>
+
+            <fieldset class="plate__section">
+              <legend class="sublabel">Extra config (advanced)</legend>
+              <label class="fld"><span class="hint">Additional console commands, one per line. Lines that change the rcon password or the rotation, or use exec or quit, are ignored.</span>
+                <textarea name="extra" rows="4" maxlength="4000" spellcheck="false"></textarea>
+              </label>
+            </fieldset>
+          </form>
+        </div>
+
+        <!-- ======================== Presets ======================== -->
+        <div class="page" id="page-presets" data-page="presets" hidden>
+          <section class="plate" id="presets-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-files"/></svg></span>
+              <h1 class="plate__title">Presets</h1>
+            </header>
+            <div class="plate__section">
+              <p class="muted">A preset holds the game settings: mode, limits, bots and map rotation. Server name,
+                password and access settings stay as they are. Maps this server does not have are left out.</p>
+            </div>
+            <div class="plate__section">
+              <ul id="presets" class="list presets"></ul>
+            </div>
+            <form id="preset-form" class="plate__section bar">
+              <input type="text" id="preset-name" maxlength="40" placeholder="Preset name" aria-label="Preset name" required>
+              <button type="submit" class="btn btn--loud">Save current settings as preset</button>
+            </form>
+          </section>
+        </div>
+
+        <!-- ======================== Players ======================== -->
+        <div class="page" id="page-players" data-page="players" hidden>
+          <section class="plate" id="players-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-person"/></svg></span>
+              <h1 class="plate__title">Players</h1>
+              <div class="plate__actions"><button type="button" id="roster-save" class="btn btn--loud">Save players</button></div>
+            </header>
+            <div class="plate__section stack">
+              <p class="muted">Known players and the names they play under. Statistics of all names of a player are combined.
+                The lobby suggests these names and uses the model as default.</p>
+              <label class="fld fld--narrow"><span class="fld__label">Player names</span>
+                <select id="name-mode">
+                  <option value="0">Anyone can join with any name</option>
+                  <option value="1">Only players on this list (others are kicked)</option>
                 </select>
-              </span>
-            </label>
-            <div class="row">
-              <button data-action="addBot">Add bot</button>
-              <button data-action="kickBots" class="secondary">Remove all bots</button>
+              </label>
             </div>
-          </div>
-          <div class="control">
-            <label>Message to all players
-              <input type="text" id="act-say" maxlength="150">
-            </label>
-            <button data-action="say">Send</button>
-          </div>
+            <div class="plate__section">
+              <div class="table-wrap table-wrap--flat">
+                <table class="table roster">
+                  <thead><tr><th>Name</th><th>Other names (comma separated)</th><th>Default model</th><th></th></tr></thead>
+                  <tbody id="roster"></tbody>
+                </table>
+              </div>
+              <div class="bar"><button type="button" id="roster-add" class="btn">＋ Add player</button></div>
+            </div>
+            <div class="plate__section">
+              <h2 class="sublabel">Recently seen names not on the list</h2>
+              <ul id="recent-names" class="list"></ul>
+            </div>
+          </section>
         </div>
-        <div class="restart-row">
-          <button id="restart" class="danger">Restart game server</button>
-          <span class="muted">Disconnects all players for a few seconds and starts the rotation from the first map.</span>
+
+        <!-- ======================== Statistics ======================== -->
+        <div class="page" id="page-statistics" data-page="statistics" hidden>
+          <section class="plate" id="stats-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-coins"/></svg></span>
+              <h1 class="plate__title">Statistics</h1>
+              <div class="plate__actions"><a class="btn btn--quiet" href="/stats/" target="_blank" rel="noopener">Open stats page</a></div>
+            </header>
+            <div class="plate__section">
+              <label class="check"><input type="checkbox" id="stats-public"> The stats page is public: anyone who can open the game can see <code class="code">/stats/</code></label>
+            </div>
+            <div class="plate__section">
+              <div id="admin-stats"></div>
+            </div>
+            <div class="plate__section bar">
+              <button type="button" id="stats-reset" class="btn btn--danger">Reset statistics</button>
+              <span class="muted">The current statistics are archived in /data/stats-archive before they are cleared.</span>
+            </div>
+          </section>
         </div>
-      </section>
 
-      <section class="card" id="presets-card">
-        <h2>Presets</h2>
-        <p class="muted">A preset holds the game settings: mode, limits, bots and map rotation. Server name,
-          password and access settings stay as they are. Maps this server does not have are left out.</p>
-        <ul id="presets" class="recent presets"></ul>
-        <form id="preset-form" class="row">
-          <input type="text" id="preset-name" maxlength="40" placeholder="Preset name" aria-label="Preset name" required>
-          <button type="submit" class="secondary">Save current settings as preset</button>
-        </form>
-      </section>
-
-      <form id="settings-form" class="card">
-        <div class="card-head">
-          <h2>Settings</h2>
-          <button type="submit">Save &amp; apply</button>
+        <!-- ======================== Bans ======================== -->
+        <div class="page" id="page-bans" data-page="bans" hidden>
+          <section class="plate" id="bans-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+              <h1 class="plate__title">Bans</h1>
+            </header>
+            <div class="plate__section">
+              <p class="muted">Banned players are kicked when they join. Use <em>Ban</em> next to a player on the
+                <a href="#server">Server</a> page, or ban an address or a name here.</p>
+            </div>
+            <form id="ban-form" class="plate__section fields fields--end">
+              <label class="fld"><span class="fld__label">IP address</span><input type="text" id="ban-ip" placeholder="e.g. 203.0.113.7" autocomplete="off" spellcheck="false"></label>
+              <label class="fld"><span class="fld__label">or name</span><input type="text" id="ban-name" maxlength="32" autocomplete="off"></label>
+              <label class="fld"><span class="fld__label">Reason</span><input type="text" id="ban-reason" maxlength="200" autocomplete="off"></label>
+              <label class="fld"><span class="fld__label">Duration</span><select id="ban-duration">
+                <option value="3600">1 hour</option>
+                <option value="86400">1 day</option>
+                <option value="604800">1 week</option>
+                <option value="2592000">30 days</option>
+                <option value="">Permanent</option>
+              </select></label>
+              <div><button type="submit" class="btn btn--loud">Ban</button></div>
+            </form>
+            <div class="plate__section">
+              <h2 class="sublabel">Active bans</h2>
+              <div class="table-wrap table-wrap--flat">
+                <table class="table">
+                  <thead><tr><th>Address</th><th>Name</th><th>Reason</th><th>Until</th><th></th></tr></thead>
+                  <tbody id="bans"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         </div>
-        <p class="muted">Changes are applied to the running server right away. Fields marked
-          <span class="tag next">next map</span> apply when the next map loads.</p>
 
-        <fieldset>
-          <legend>Server</legend>
-          <label>Server name <input name="hostname" type="text" maxlength="64"></label>
-          <label>Message of the day <input name="motd" type="text" maxlength="128"></label>
-          <label>Join password <input name="password" type="text" maxlength="32" placeholder="none" autocomplete="off"></label>
-          <label>Max players <span class="tag next">next map</span> <input name="maxclients" type="number" min="1" max="32"></label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Game rules</legend>
-          <label>Game type <span class="tag next">next map</span> <select name="gametype" id="gametype"></select></label>
-          <label>Frag limit <input name="fraglimit" type="number" min="0" max="999"></label>
-          <label>Time limit (minutes) <input name="timelimit" type="number" min="0" max="999"></label>
-          <label>Capture limit (CTF) <input name="capturelimit" type="number" min="0" max="999"></label>
-          <label>Quad damage factor <input name="quadfactor" type="number" min="1" max="10"></label>
-          <label>Weapon respawn (seconds) <input name="weaponrespawn" type="number" min="1" max="60"></label>
-          <label>Force respawn after (seconds, 0 = off) <input name="forcerespawn" type="number" min="0" max="60"></label>
-          <label>Kick inactive players after (seconds, 0 = off) <input name="inactivity" type="number" min="0" max="86400"></label>
-          <label class="check"><input name="friendlyfire" type="checkbox"> Friendly fire</label>
-          <label class="check"><input name="teamAutoJoin" type="checkbox"> Put new players on a team automatically (team modes)</label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Bots</legend>
-          <label class="check"><input name="botEnable" type="checkbox"> Bots allowed <span class="tag next">next map</span></label>
-          <label>Fill server with bots up to (players, 0 = off) <input name="botMinplayers" type="number" min="0" max="32"></label>
-          <label>Skill of automatic bots
-            <select name="botSkill">
-              <option value="1">1 – I Can Win</option>
-              <option value="2">2 – Bring It On</option>
-              <option value="3">3 – Hurt Me Plenty</option>
-              <option value="4">4 – Hardcore</option>
-              <option value="5">5 – Nightmare!</option>
-            </select>
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Map rotation</legend>
-          <ol id="rotation" class="rotation"></ol>
-          <div class="row">
-            <select id="rotation-add" aria-label="Map to add"></select>
-            <button type="button" id="rotation-add-btn" class="secondary">Add to rotation</button>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Extra config (advanced)</legend>
-          <label>Additional console commands, one per line. Lines that change the rcon password or the rotation, or use exec or quit, are ignored.
-            <textarea name="extra" rows="4" maxlength="4000" spellcheck="false"></textarea>
-          </label>
-        </fieldset>
-      </form>
-
-      <section class="card" id="players-card">
-        <div class="card-head">
-          <h2>Players</h2>
-          <button type="button" id="roster-save">Save players</button>
+        <!-- ======================== Backup ======================== -->
+        <div class="page" id="page-backup" data-page="backup" hidden>
+          <section class="plate" id="backup-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
+              <h1 class="plate__title">Backup</h1>
+            </header>
+            <div class="plate__section">
+              <p class="muted">One file with the settings, presets, the player list, bans and statistics (not the rcon password).
+                Restoring replaces all of them; the current state is kept in /data/backups first.</p>
+            </div>
+            <div class="plate__section bar">
+              <a class="btn" href="/admin/api/backup" download>Download backup</a>
+              <label class="btn btn--quiet file-button">Restore from file…
+                <input type="file" id="backup-file" accept="application/json,.json">
+              </label>
+            </div>
+          </section>
         </div>
-        <p class="muted">Known players and the names they play under. Statistics of all names of a player are combined.
-          The lobby suggests these names and uses the model as default.</p>
-        <label>Player names
-          <select id="name-mode">
-            <option value="0">Anyone can join with any name</option>
-            <option value="1">Only players on this list (others are kicked)</option>
-          </select>
-        </label>
-        <div class="table-wrap">
-          <table class="players roster">
-            <thead><tr><th>Name</th><th>Other names (comma separated)</th><th>Default model</th><th></th></tr></thead>
-            <tbody id="roster"></tbody>
-          </table>
-        </div>
-        <div class="row">
-          <button type="button" id="roster-add" class="secondary">Add player</button>
-        </div>
-        <h3>Recently seen names not on the list</h3>
-        <ul id="recent-names" class="recent"></ul>
-      </section>
 
-      <section class="card" id="stats-card">
-        <div class="card-head">
-          <h2>Statistics</h2>
-          <a class="button secondary" href="/stats/" target="_blank" rel="noopener">Open stats page</a>
+        <!-- ======================== Audit log ======================== -->
+        <div class="page" id="page-audit" data-page="audit" hidden>
+          <section class="plate" id="audit-card">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></span>
+              <h1 class="plate__title">Audit log</h1>
+              <div class="plate__actions"><button type="button" id="audit-refresh" class="btn btn--quiet">Read again</button></div>
+            </header>
+            <div class="plate__section">
+              <div class="table-wrap table-wrap--flat audit-wrap">
+                <table class="table audit">
+                  <thead><tr><th>Time</th><th>From</th><th>Action</th><th>Details</th></tr></thead>
+                  <tbody id="audit"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         </div>
-        <div class="row">
-          <label class="check"><input type="checkbox" id="stats-public"> Stats page is public (anyone who can open the game can see <code>/stats/</code>)</label>
-        </div>
-        <div id="admin-stats"></div>
-        <div class="restart-row">
-          <button type="button" id="stats-reset" class="danger">Reset statistics</button>
-          <span class="muted">The current statistics are archived in /data/stats-archive before they are cleared.</span>
-        </div>
-      </section>
 
-      <section class="card" id="bans-card">
-        <h2>Bans</h2>
-        <p class="muted">Banned players are kicked when they join. Use the <em>Ban</em> button in the player list above,
-          or ban an address or a name here.</p>
-        <form id="ban-form" class="ban-form">
-          <label>IP address <input type="text" id="ban-ip" placeholder="e.g. 203.0.113.7" autocomplete="off" spellcheck="false"></label>
-          <label>or name <input type="text" id="ban-name" maxlength="32" autocomplete="off"></label>
-          <label>Reason <input type="text" id="ban-reason" maxlength="200" autocomplete="off"></label>
-          <label>Duration <select id="ban-duration">
-            <option value="3600">1 hour</option>
-            <option value="86400">1 day</option>
-            <option value="604800">1 week</option>
-            <option value="2592000">30 days</option>
-            <option value="">Permanent</option>
-          </select></label>
-          <button type="submit">Ban</button>
-        </form>
-        <div class="table-wrap">
-          <table class="players">
-            <thead><tr><th>Address</th><th>Name</th><th>Reason</th><th>Until</th><th></th></tr></thead>
-            <tbody id="bans"></tbody>
-          </table>
+        <!-- ======================== Console ======================== -->
+        <div class="page" id="page-console" data-page="console" hidden>
+          <section class="plate">
+            <header class="plate__head">
+              <span class="plate__icon"><svg class="icon" aria-hidden="true"><use href="#i-table"/></svg></span>
+              <h1 class="plate__title">Console</h1>
+            </header>
+            <form id="console-form" class="plate__section bar">
+              <input type="text" id="console-input" placeholder="e.g. cvarlist g_*" maxlength="256" autocomplete="off" spellcheck="false" aria-label="Server command">
+              <button type="submit" class="btn btn--loud">Run</button>
+            </form>
+            <div class="plate__section">
+              <pre id="console-output" class="console"></pre>
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section class="card" id="backup-card">
-        <h2>Backup</h2>
-        <p class="muted">One file with the settings, the player list, bans and statistics (not the rcon password).
-          Restoring replaces all of them; the current state is kept in /data/backups first.</p>
-        <div class="row">
-          <a class="button secondary" href="/admin/api/backup" download>Download backup</a>
-          <label class="button secondary file-button">Restore from file…
-            <input type="file" id="backup-file" accept="application/json,.json">
-          </label>
-        </div>
-      </section>
-
-      <section class="card" id="audit-card">
-        <div class="card-head">
-          <h2>Audit log</h2>
-          <button type="button" id="audit-refresh" class="secondary">Refresh</button>
-        </div>
-        <div class="table-wrap">
-          <table class="players audit">
-            <thead><tr><th>Time</th><th>From</th><th>Action</th><th>Details</th></tr></thead>
-            <tbody id="audit"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Console</h2>
-        <form id="console-form" class="row">
-          <input type="text" id="console-input" placeholder="e.g. cvarlist g_*" maxlength="256" autocomplete="off" spellcheck="false">
-          <button type="submit">Run</button>
-        </form>
-        <pre id="console-output" class="console"></pre>
-      </section>
-    </div>
-  </main>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

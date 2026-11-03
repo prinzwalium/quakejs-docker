@@ -34,7 +34,9 @@ Send all you friends/coworkers the link: ex. http://localhost:8080 and start fra
 
 #### Admin interface
 
-The image includes a web interface at `/admin/` (e.g. http://localhost:8080/admin/) to manage the server:
+The image includes a web interface at `/admin/` (e.g. http://localhost:8080/admin/) to manage the server.
+Each section (Server, Settings, Presets, Players, Statistics, Bans, Backup, Audit log, Console) has its own
+page in the side rail; on a phone the rail becomes a strip of links at the top.
 
 - **Settings:** server name, message of the day, join password, max players, game type, frag/time/capture limits, friendly fire, team auto-join, quad factor, respawn times, bots (allowed, fill up to N players, skill)
 - **Map rotation:** built from the maps the server actually has, in any order. Each map shows the game types it
@@ -96,6 +98,15 @@ automatically unless *team auto-join* is off (then they start as spectators).
   password). Restoring validates the file first and keeps the previous state in `/data/backups/`.
 - **Healthcheck:** the image reports *healthy* when nginx, the admin interface and the game server all answer
   (`docker ps` / `docker inspect`).
+
+#### Look
+
+The lobby, the admin interface, the stats page and the disconnect page follow the
+5etools-online design system: a warm near-black page, panels with thin rules, names in gold small capitals.
+They are dark by default and switch to a light parchment version when the device is set to light.
+The game itself is not affected. The shared tokens and components are in `include/quakejs/html/theme/`
+(served at `/theme/`). The fonts, Alegreya SC and Alegreya Sans, are licensed under the SIL Open Font License 1.1
+(see `theme/fonts/LICENSE-*.txt`) and are shipped with the image, never loaded from Google Fonts.
 
 #### Real player addresses behind a reverse proxy
 

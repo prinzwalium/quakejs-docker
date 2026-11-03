@@ -51,9 +51,9 @@
   // Recent matches table. Returns { section, reload(bots) }.
   function matchHistory() {
     const section = el('div', 'matches');
-    const head = el('h3', null, 'Recent matches');
+    const head = el('h3', 'sublabel', 'Recent matches');
     const wrap = el('div', 'table-wrap');
-    const table = el('table', 'players stats-table matches-table');
+    const table = el('table', 'table stats-table matches-table');
     const thead = el('thead');
     const tbody = el('tbody');
     const hr = el('tr');
@@ -72,7 +72,7 @@
       const tr = el('tr', 'detail');
       const td = el('td');
       td.colSpan = 6;
-      const t = el('table', 'players scoreboard');
+      const t = el('table', 'table scoreboard');
       const h = el('tr');
       const teams = m.gametype >= 3;
       h.append(el('th', null, 'Player'));
@@ -81,10 +81,12 @@
       t.append(h);
       for (const p of m.players) {
         const r = el('tr');
-        const name = p.name + (p.bot ? ' (bot)' : '');
         // Bots can share a name: in free-for-all only the top score wins.
         const won = m.winners.includes(p.name) && (teams || p.score === m.players[0].score);
-        r.append(el('td', won ? 'winner' : null, name));
+        const cell = el('td', won ? 'name winner' : 'name', p.name);
+        if (p.bot) cell.append(' ', el('span', 'row__tag', 'bot'));
+        if (won) cell.append(' ', el('span', 'pill pill--good', 'Winner'));
+        r.append(cell);
         if (teams) r.append(el('td', null, TEAMS[p.team] || '–'));
         r.append(el('td', 'num', p.score));
         t.append(r);
@@ -101,9 +103,9 @@
         const tr = el('tr', 'clickable');
         tr.append(
           el('td', null, ago(m.time)),
-          el('td', null, m.map || '–'),
+          el('td', 'map', m.map || '–'),
           el('td', null, MODES[m.gametype] || `Mode ${m.gametype}`),
-          el('td', null, winnerText(m)),
+          el('td', m.gametype < 3 && m.winners.length ? 'name' : null, winnerText(m)),
           el('td', 'num', m.players.length),
           el('td', 'num', duration(m.duration)),
         );
@@ -139,7 +141,7 @@
     let sortDir = -1;
     let open = null;
 
-    const bar = el('div', 'row stats-bar');
+    const bar = el('div', 'bar stats-bar');
     const botsLabel = el('label', 'check');
     const bots = el('input');
     bots.type = 'checkbox';
@@ -148,7 +150,7 @@
     bar.append(botsLabel, count);
 
     const wrap = el('div', 'table-wrap');
-    const table = el('table', 'players stats-table');
+    const table = el('table', 'table stats-table');
     const thead = el('thead');
     const tbody = el('tbody');
     table.append(thead, tbody);
@@ -214,9 +216,9 @@
         for (const [key, , type] of COLUMNS) {
           let v = r[key];
           if (type === 'date') v = ago(v);
-          if (key === 'name') v = r.name + (r.bot ? ' (bot)' : '');
           if (v === null || v === undefined || v === '') v = '–';
-          const td = el('td', type === 'num' ? 'num' : null, v);
+          const td = el('td', type === 'num' ? 'num' : (key === 'name' ? 'name' : null), v);
+          if (key === 'name' && r.bot) td.append(' ', el('span', 'row__tag', 'bot'));
           tr.append(td);
         }
         tr.tabIndex = 0;
@@ -260,6 +262,7 @@
       try {
         const res = await fetch('/admin/api/public/server', { credentials: 'same-origin' });
         const s = res.ok ? await res.json() : { online: false };
+        now.classList.toggle('notice--warn', !s.online);
         if (!s.online) {
           now.textContent = 'The game server is not reachable right now.';
         } else {

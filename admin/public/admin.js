@@ -26,7 +26,7 @@
   function toast(msg, isError) {
     const t = $('toast');
     t.textContent = msg;
-    t.className = isError ? 'error' : '';
+    t.className = isError ? 'toast toast--bad' : 'toast';
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, isError ? 8000 : 4000);
@@ -48,9 +48,39 @@
 
   function showOnly(id) {
     for (const s of ['disabled', 'login', 'app']) $(s).hidden = s !== id;
-    $('logout').hidden = id !== 'app';
+    $('rail-items').hidden = id !== 'app';
+    document.body.classList.toggle('signed-out', id !== 'app');
     if (id !== 'app') clearInterval(statusTimer);
   }
+
+  // ------------------------------------------------------------ pages (rail)
+
+  const PAGES = ['server', 'settings', 'presets', 'players', 'statistics', 'bans', 'backup', 'audit', 'console'];
+  let page = 'server';
+
+  // The page comes from the address (#settings); every page stays in the document, so
+  // switching pages keeps unsaved changes in the settings form.
+  function showPage() {
+    const want = location.hash.replace(/^#/, '');
+    page = PAGES.includes(want) ? want : 'server';
+    for (const el of document.querySelectorAll('.page')) el.hidden = el.dataset.page !== page;
+    for (const a of document.querySelectorAll('.rail__item[href]')) {
+      const on = a.getAttribute('href') === `#${page}`;
+      a.classList.toggle('rail__item--on', on);
+      if (on) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    }
+    const title = document.querySelector(`#page-${page} .plate__title`);
+    document.title = `${title ? title.textContent : 'Server'} · QuakeJS Admin`;
+  }
+  window.addEventListener('hashchange', () => {
+    showPage();
+    window.scrollTo(0, 0);
+    if ($('app').hidden) return;
+    if (page === 'server') refreshStatus();
+    if (page === 'audit') loadAudit();
+  });
+  showPage();
 
   function showLogin() {
     showOnly('login');
@@ -63,7 +93,12 @@
     await loadState();
     await Promise.all([refreshStatus(), loadPlayers(), loadStats(), loadBans(), loadAudit(), loadPresets()]);
     clearInterval(statusTimer);
-    statusTimer = setInterval(() => { if (!document.hidden) refreshStatus(); }, 5000);
+    // Every 5 s on the Server page, every 15 s elsewhere (the player list also feeds the ban check).
+    let tick = 0;
+    statusTimer = setInterval(() => {
+      tick++;
+      if (!document.hidden && (page === 'server' || tick % 3 === 0)) refreshStatus();
+    }, 5000);
   }
 
   // ------------------------------------------------------------ status
@@ -76,8 +111,8 @@
       return;
     }
     const badge = $('status-badge');
-    badge.textContent = s.online ? 'online' : 'offline';
-    badge.className = 'badge ' + (s.online ? 'ok' : 'bad');
+    badge.textContent = s.online ? 'Live' : 'Offline';
+    badge.className = 'pill ' + (s.online ? 'pill--good' : 'pill--cond');
     const tbody = $('players');
     if (!s.online) {
       $('st-map').textContent = '–';
@@ -95,34 +130,41 @@
       const td = document.createElement('td');
       td.colSpan = 5;
       td.className = 'muted';
-      td.textContent = 'No players';
+      td.textContent = 'Nobody is playing.';
       tr.append(td);
       tbody.replaceChildren(tr);
       return;
     }
     tbody.replaceChildren(...s.clients.map(c => {
       const tr = document.createElement('tr');
-      const name = c.name + (c.bot ? ' (bot)' : '');
-      for (const v of [c.num, name, c.score, c.bot ? '–' : c.ping]) {
+      const cells = [[c.num, 'num'], [c.name, 'name'], [c.score, 'num'], [c.bot ? '–' : c.ping, 'num']];
+      for (const [v, cls] of cells) {
         const td = document.createElement('td');
+        td.className = cls;
         td.textContent = v;
+        if (cls === 'name' && c.bot) {
+          const tag = document.createElement('span');
+          tag.className = 'row__tag';
+          tag.textContent = 'bot';
+          td.append(' ', tag);
+        }
         tr.append(td);
       }
       const td = document.createElement('td');
       const b = document.createElement('button');
-      b.className = 'secondary small';
+      b.className = 'btn btn--danger btn--slim';
       b.textContent = 'Kick';
       b.addEventListener('click', async () => {
         if (!confirm(`Kick ${c.name}?`)) return;
         await doAction({ action: 'kick', num: c.num }, `${c.name} kicked`);
       });
       const cell = document.createElement('span');
-      cell.className = 'row';
+      cell.className = 'bar bar--end';
       cell.append(b);
       if (!c.bot) {
         tr.title = c.ip ? `Address: ${c.ip}` : '';
         const ban = document.createElement('button');
-        ban.className = 'secondary small';
+        ban.className = 'btn btn--danger btn--slim';
         ban.textContent = 'Ban';
         ban.addEventListener('click', () => banPlayer(c));
         cell.append(ban);
@@ -164,19 +206,23 @@
     ol.replaceChildren(...rotation.map((m, i) => {
       const li = document.createElement('li');
       const span = document.createElement('span');
+      span.className = 'rotation__map';
       span.textContent = mapLabel(m);
       if (!mapFits(m, Number($('gametype').value))) {
-        span.className = 'warn';
-        span.title = `This map is not made for ${state.gametypes[$('gametype').value]}`;
+        const warn = document.createElement('span');
+        warn.className = 'unfit';
+        warn.textContent = `not made for ${state.gametypes[$('gametype').value]}`;
+        span.append(' ', warn);
       }
       const btns = document.createElement('span');
-      btns.className = 'row';
+      btns.className = 'bar';
       const mk = (label, title, fn, disabled) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'secondary small';
+        b.className = 'btn btn--quiet btn--slim';
         b.textContent = label;
         b.title = title;
+        b.setAttribute('aria-label', `${title}: ${m}`);
         b.disabled = disabled;
         b.addEventListener('click', fn);
         return b;
@@ -373,7 +419,7 @@
       model.addEventListener('change', () => { p.model = model.value; });
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'secondary small';
+      del.className = 'btn btn--quiet btn--slim';
       del.textContent = 'Remove';
       del.addEventListener('click', () => { roster.splice(i, 1); renderRoster(); });
       for (const c of [name, aliases, model, del]) {
@@ -397,10 +443,11 @@
     ul.replaceChildren(...recent.map((r) => {
       const li = document.createElement('li');
       const name = document.createElement('span');
+      name.className = 'name list__name';
       name.textContent = r.name;
       const add = document.createElement('button');
       add.type = 'button';
-      add.className = 'secondary small';
+      add.className = 'btn btn--slim';
       add.textContent = 'Add as player';
       add.addEventListener('click', () => {
         roster.push({ name: r.name, aliases: [], model: models.includes(r.model) ? r.model : '' });
@@ -412,7 +459,7 @@
       target.append(option('', 'Another name of…'), ...roster.map((p, i) => option(String(i), p.name)));
       const alias = document.createElement('button');
       alias.type = 'button';
-      alias.className = 'secondary small';
+      alias.className = 'btn btn--quiet btn--slim';
       alias.textContent = 'Add';
       alias.addEventListener('click', () => {
         const p = roster[Number(target.value)];
@@ -535,7 +582,7 @@
       }
       const td = document.createElement('td');
       const un = document.createElement('button');
-      un.className = 'secondary small';
+      un.className = 'btn btn--quiet btn--slim';
       un.textContent = 'Unban';
       un.addEventListener('click', async () => {
         try {
@@ -595,12 +642,13 @@
     ul.replaceChildren(...list.map((ps) => {
       const li = document.createElement('li');
       const name = document.createElement('span');
+      name.className = 'name list__name';
       name.textContent = ps.name;
       const info = document.createElement('span');
       info.className = 'muted preset-info';
       info.textContent = presetSummary(ps);
       const btns = document.createElement('span');
-      btns.className = 'row';
+      btns.className = 'bar list__actions';
       const mk = (text, cls, fn) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -609,9 +657,9 @@
         b.addEventListener('click', fn);
         btns.append(b);
       };
-      mk('Apply', 'secondary small', () => applyPreset(ps, false));
-      mk('Apply & change map', 'small', () => applyPreset(ps, true));
-      mk('Delete', 'danger small', async () => {
+      mk('Apply', 'btn btn--quiet btn--slim', () => applyPreset(ps, false));
+      mk('Apply & change map', 'btn btn--slim', () => applyPreset(ps, true));
+      mk('Delete', 'btn btn--danger btn--slim', async () => {
         if (!confirm(`Delete the preset "${ps.name}"?`)) return;
         try {
           renderPresets((await api('DELETE', `presets?id=${encodeURIComponent(ps.id)}`)).presets);
